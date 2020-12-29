@@ -4,15 +4,16 @@
 #include <memory>
 #include <cassert>
 #include <utility>
+#include <cinttypes>
 
 namespace SparseMatrix {
 	/// @brief Class to hold sparse matrix into triplet (coordinate) format.
 	/// Triplet format represents the matrix entries as list of triplets (row, col, value)
 	/// It is allowed repetition of elements, i.e. row and col can be the same for two
-	/// separate entries, later on when the matrix is converted to compresses sparse format elements with
-	/// repeating indexes will be summed. This class is supposed to be used as intermediate class to add
-	/// entries dynamically. After all data has been added call toCSR or toCSC to get sparse
-	/// matrix in compressed sparse row or compressed sparse column format.
+	/// separate entries, when this happens elements are being summed. Repeating elements does not
+	/// increase the count of non zero elements. This class is supposed to be used as intermediate class to add
+	/// entries dynamically. After all data is gathered it should be converted to CSRMatrix which provides
+	/// various arithmetic functions.
 	class TripletMatrix {
 	private:
 		struct Triplet {
@@ -22,13 +23,15 @@ namespace SparseMatrix {
 				col(col),
 				value(value)
 			{ }
+			Triplet(const Triplet&) noexcept = default;
+			Triplet(Triplet&&) noexcept = default;
 			const int getRow() const noexcept {
 				return row;
 			}
 			const int getCol() const noexcept {
 				return col;
 			}
-			const int getValue() const noexcept {
+			const float getValue() const noexcept {
 				return value;
 			}
 		private:
@@ -37,11 +40,19 @@ namespace SparseMatrix {
 		};
 	public:
 		using ConstIterator = std::vector<Triplet>::const_iterator;
-		/// @brief Create empty triplet matrix
-		TripletMatrix() = default;
-		/// @brief Create triplet matrix with predefined number of triplets in it.
-		/// @param numTriplets Number of triples which will be allocated.
-		TripletMatrix(size_t numTriplets);
+		/// @brief Initialize triplet matrix with given number of rows and columns
+		/// The number of rows and columns does not have any affect the space allocated by the matrix
+		/// @param[in] rowCount Number of rows which the dense form of the matrix is supposed to have
+		/// @param[in] colCount Number of columns which the dense form of the matrix is supposed to have
+		TripletMatrix(int rowCount, int colCount) noexcept;
+		/// @brief Initialize triplet matrix with given number of rows and columns and allocate space for the elements of the matrix
+		/// Note that this constructor only allocates space but does not initialize the elements, nor it changes the number of non zero elements,
+		/// thus the number of non zero elements will be 0 after the constructor is called.
+		/// The number of rows and columns does not have any affect the space allocated by the matrix
+		/// @param[in] rowCount Number of rows which the dense form of the matrix is supposed to have
+		/// @param[in] colCount Number of columns which the dense form of the matrix is supposed to have
+		/// @param[in] numTriplets How many elements to allocate space for.
+		TripletMatrix(int rowCount, int colCount, int numTriplets) noexcept;
 		~TripletMatrix() = default;
 		TripletMatrix(TripletMatrix&&) = default;
 		TripletMatrix& operator=(TripletMatrix&&) = default;
@@ -60,7 +71,13 @@ namespace SparseMatrix {
 		ConstIterator end() const noexcept;
 		/// @brief Get the number of triplets
 		/// @return Number of triplets into the array
-		const size_t size() const noexcept;
+		const int getNonZeroCount() const noexcept;
+		/// @brief Get the total number of rows of the matrix
+		/// @return The row count which dense matrix is supposed to have (not only the stored ones)
+		const int getDenseRowCount() const noexcept;
+		/// @brief Get the total number of cols of the matrix
+		/// @return The column count which dense matrix is supposed to have (not only the stored ones)
+		const int getDenseColCount() const noexcept;
 	private:
 		/// @brief List of triplets. Array of structures is chosen since converting to
 		/// compressed sparse format requires iteration over all triplets and this format
@@ -70,14 +87,26 @@ namespace SparseMatrix {
 		/// Key is unique representation of the matrix index (first 32 bits are the col second are the row)
 		/// The value is index into the data array of triplets where the element is
 		std::unordered_map<uint64_t, int> entryIndex;
+		int denseRowCount; ///< Number of rows in the matrix  
+		int denseColCount; ///< Number of columns in the matrix
 	};
 
-	TripletMatrix::TripletMatrix(size_t numTriplets) {
+	TripletMatrix::TripletMatrix(int denseRowCount, int denseColCount) noexcept :
+		denseRowCount(denseRowCount),
+		denseColCount(denseColCount)
+	{ }
+
+	TripletMatrix::TripletMatrix(int denseRowCount, int denseColCount, int numTriplets) noexcept :
+		denseRowCount(denseRowCount),
+		denseColCount(denseColCount)
+	{
 		data.reserve(numTriplets);
 	}
 
 	void TripletMatrix::addEntry(int row, int col, float value) {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
+		assert(row >= 0 && row < denseRowCount);
+		assert(col >= 0 && row < denseColCount);
 		const uint64_t key = static_cast<uint64_t>(row) << sizeof(int) | static_cast<uint64_t>(col);
 		auto it = entryIndex.find(key);
 		if (it == entryIndex.end()) {
@@ -97,9 +126,18 @@ namespace SparseMatrix {
 		return data.end();
 	}
 
-	inline const size_t TripletMatrix::size() const noexcept {
+	inline const int TripletMatrix::getNonZeroCount() const noexcept {
 		return data.size();
 	}
+
+	inline const int TripletMatrix::getDenseRowCount() const noexcept {
+		return denseRowCount;
+	}
+
+	inline const int TripletMatrix::getDenseColCount() const noexcept {
+		return denseColCount;
+	}
+
 	/// @brief Const forward iterator for matrix in compressed sparse row format
 	class CSRConstIterator {
 	private:
@@ -162,7 +200,7 @@ namespace SparseMatrix {
 		const int* columnIndex,
 		const int* rowPointer,
 		const int currentRow,
-		const int currentColumIndex
+		const int currentColumnIndex
 	) noexcept :
 		values(values),
 		columnIndex(columnIndex),
@@ -228,8 +266,11 @@ namespace SparseMatrix {
 
 	CSRConstIterator& CSRConstIterator::operator++() noexcept {
 		currentElement.currentColumnIndex++;
-		if (currentElement.currentColumnIndex >= currentElement.rowPointer[currentElement.currentRow + 1]) {
-			currentElement.currentRow++;
+		assert(currentElement.currentColumnIndex <= currentElement.rowPointer[currentElement.currentRow + 1]);
+		if (currentElement.currentColumnIndex == currentElement.rowPointer[currentElement.currentRow + 1]) {
+			do {
+				currentElement.currentRow++;
+			} while (currentElement.rowPointer[currentElement.currentRow + 1] == currentElement.currentColumnIndex);
 		}
 		return *this;
 	}
@@ -250,14 +291,12 @@ namespace SparseMatrix {
 	/// The columns in each row are not ordered in any particular way (i.e. in ascending order)
 	class CSRMatrix {
 	public:
-		using LinearizedDenseFormat = std::unique_ptr<float[], decltype(&std::free)>;
+		using ConstIterator = CSRConstIterator;
 		/// @brief Initialize matrix in compressed sparse row format from a given matrix into triplet format
 		/// In case that the constructor could not allocate the needed amount of memory,
 		/// denseRowCount and denseColCount are set to -1 and all memory that was allocated will be freed.
-		/// @param rows Number of rows in the matrix
-		/// @param cols Number of columns in the matrix
-		/// @param tripletMatrix Matrix in triplet format from which CSR matrix will be created
-		CSRMatrix(int rows, int cols, const TripletMatrix& tripletMatrix) noexcept;
+		/// @param[in] tripletMatrix Matrix in triplet format from which CSR matrix will be created
+		explicit CSRMatrix(const TripletMatrix& tripletMatrix) noexcept;
 		CSRMatrix(CSRMatrix&&) noexcept;
 		CSRMatrix& operator=(CSRMatrix&&) noexcept;
 		CSRMatrix(const CSRMatrix&) = delete;
@@ -272,9 +311,6 @@ namespace SparseMatrix {
 		/// @brief Get the total number of cols of the matrix
 		/// @return The column count which dense matrix is supposed to have (not only the stored ones)
 		const int getDenseColCount() const noexcept;
-		/// @brief Allocate and fill dense version of the matrix
-		/// @return Pointer to the allocated matrix.
-		LinearizedDenseFormat toLinearizedDenseMatrix() const;
 		/// @brief Get forward iterator to the starting from the beginning of the matrix
 		/// The rows are guaranteed to be iterated in nondecreasing order
 		/// There is no particular order in which the columns will be iterated
@@ -296,17 +332,19 @@ namespace SparseMatrix {
 		std::unique_ptr<int[]> rowPointer;
 		int denseRowCount; ///< Number of rows in the matrix
 		int denseColCount; ///< Number of columns in the matrix
+		int firstActiveRow; ///< Index of the first row which contains nonzero elements
 	};
 
-	CSRMatrix::CSRMatrix(const int rows, const int cols, const TripletMatrix& triplet) noexcept :
-		values(new float[triplet.size()]),
-		columnIndex(new int[triplet.size()]),
-		rowPointer(new int[rows + 1]),
-		denseRowCount(rows),
-		denseColCount(cols)
+	CSRMatrix::CSRMatrix(const TripletMatrix& triplet) noexcept :
+		values(new float[triplet.getNonZeroCount()]),
+		columnIndex(new int[triplet.getNonZeroCount()]),
+		rowPointer(new int[triplet.getDenseRowCount() + 1]),
+		denseRowCount(triplet.getDenseRowCount()),
+		denseColCount(triplet.getDenseColCount()),
+		firstActiveRow(-1)
 	{
 		// Calloc was proven to be faster than new [rows]()
-		std::unique_ptr<int[], decltype(&std::free)> rowCount(static_cast<int*>(calloc(rows, sizeof(int))), &std::free);
+		std::unique_ptr<int[], decltype(&std::free)> rowCount(static_cast<int*>(calloc(denseRowCount, sizeof(int))), &std::free);
 		if (values == nullptr || columnIndex == nullptr || rowPointer == nullptr || rowCount == nullptr) {
 			assert(false);
 			denseRowCount = -1;
@@ -323,10 +361,16 @@ namespace SparseMatrix {
 		}
 
 		rowPointer[0] = 0;
-		for (int i = 1; i < rows; ++i) {
-			rowPointer[i] += rowCount[i - 1];
+		for (int i = 0; i < denseRowCount; ++i) {
+			rowPointer[i + 1] = rowCount[i] + rowPointer[i];
+			if (firstActiveRow == -1 && rowCount[i] > 0) {
+				firstActiveRow = i;
+			}
 		}
-		rowPointer[rows] = triplet.size();
+		rowPointer[denseRowCount] = triplet.getNonZeroCount();
+		if (firstActiveRow == -1) {
+			firstActiveRow = getDenseRowCount();
+		}
 
 		for (const auto& el : triplet) {
 			const int row = el.getRow();
@@ -371,26 +415,8 @@ namespace SparseMatrix {
 		return denseColCount;
 	}
 
-	inline CSRMatrix::LinearizedDenseFormat CSRMatrix::toLinearizedDenseMatrix() const {
-		int64_t size = int64_t(denseRowCount) * denseColCount;
-		LinearizedDenseFormat dense(static_cast<float*>(calloc(size, sizeof(float))), &std::free);
-		if (dense == nullptr) {
-			return dense;
-		}
-		assert(dense[0] == 0.0f);
-		for (int i = 0; i < denseRowCount; ++i) {
-			for (int j = rowPointer[i]; j < rowPointer[i + 1]; ++j) {
-				const int column = columnIndex[j];
-				const int index = i * denseColCount + column;
-				assert(index < size);
-				dense[index] = values[j];
-			}
-		}
-		return dense;
-	}
-
 	inline CSRConstIterator CSRMatrix::begin() const {
-		return CSRConstIterator(values.get(), columnIndex.get(), rowPointer.get(), 0, 0);
+		return CSRConstIterator(values.get(), columnIndex.get(), rowPointer.get(), firstActiveRow, 0);
 	}
 
 	inline CSRConstIterator CSRMatrix::end() const {
@@ -402,5 +428,20 @@ namespace SparseMatrix {
 			denseRowCount,
 			nonZeroCount
 		);
+	}
+
+	/// @brief Function to convert matrix from compressed sparse row format to dense row major matrix
+	/// Out must be allocated and filled with zero before being passed to the function
+	/// Out will be contain linearized dense version of the matrix, first CSRMatrix::getDenseRowCount elements
+	/// will be the first row of the dense matrix, next CSRMatrix::getDenseRowCount will be the second row and so on.
+	/// @param[in] compressed Matrix in Compressed Sparse Row format
+	/// @param[out] out Preallocated (and filled with zero) space where the dense matrix will be added
+	template<typename CompressedMatrixFormat>
+	static void toLinearDenseRowMajor(const CompressedMatrixFormat& compressed, float* out) noexcept {
+		const int64_t colCount = compressed.getDenseColCount();
+		for (const auto& el : compressed) {
+			const int64_t index = el.getRow() * colCount + el.getCol();
+			out[index] = el.getValue();
+		}
 	}
 }
