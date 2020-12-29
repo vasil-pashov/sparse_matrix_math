@@ -1,0 +1,6 @@
+project(sparse_matrixmath_unit_test)
+enable_testing()
+include(GoogleTest)
+find_package(GTest REQUIRED)
+add_executable(${PROJECT_NAME} ./cpp/unit_test.cpp)
+target_link_libraries(${PROJECT_NAME} GTest::GTest)
