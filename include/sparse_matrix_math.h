@@ -340,78 +340,84 @@ namespace SparseMatrix {
 		/// Dereferencing this iterator results in undefined behavior.
 		ConstIterator end() const;
 	private:
-		/// @brief Array which will hold all nonzero entries of the matrix
+		/// Array which will hold all nonzero entries of the matrix.
 		/// This is of length  number of nonzero entries
 		std::unique_ptr<float[]> values;
-		/// @brief Elements of this array represent indexes of columns where nonzero values are
-		/// It begins with the columns of the nonzero entries of the first row (if any), then the second
-		/// and so on. This is of length number of nonzero entries
-		std::unique_ptr<int[]>(columnIndex);
-		/// @brief Elements of this array the indexes where the i-th row begins in the values and columnIndex arrays
-		/// This is of length number of rows
-		std::unique_ptr<int[]> rowPointer;
+		/// If format is CSR this is the column if the i-th value
+		/// If format is CSC this is the row of the i-th value
+		std::unique_ptr<int[]> positions;
+		/// If format is CSR i-th element is index in positions and values where the i-th row starts
+		/// If format is CSC i-th element is index in positions and values where the i-th column starts
+		std::unique_ptr<int[]> start;
 		int denseRowCount; ///< Number of rows in the matrix
 		int denseColCount; ///< Number of columns in the matrix
-		int firstActiveRow; ///< Index of the first row which contains nonzero elements
+		/// Index in start array. If format is CSR the first row which has nonzero element in it
+		/// If format is CSC the first column which has nonzero element in it
+		int firstActiveStart;
+		/// Get the length of the start array as it depends on the CSFormat of the matrix
+		/// @return Length of the start array
+		const int getStartLength() const;
 	};
 
 	template<CSFormat format>
 	CSMatrix<format>::CSMatrix(const TripletMatrix& triplet) noexcept :
 		values(new float[triplet.getNonZeroCount()]),
-		columnIndex(new int[triplet.getNonZeroCount()]),
-		rowPointer(new int[triplet.getDenseRowCount() + 1]),
+		positions(new int[triplet.getNonZeroCount()]),
+		start(new int[(format == CSR ? triplet.getDenseRowCount() : triplet.getDenseColCount()) + 1]),
 		denseRowCount(triplet.getDenseRowCount()),
 		denseColCount(triplet.getDenseColCount()),
-		firstActiveRow(-1)
+		firstActiveStart(-1)
 	{
 		static_assert(format == CSFormat::CSC || format == CSFormat::CSR, "Undefined matrix format");
+		const int n = getStartLength();
 		// Calloc was proven to be faster than new [rows]()
-		std::unique_ptr<int[], decltype(&std::free)> rowCount(static_cast<int*>(calloc(denseRowCount, sizeof(int))), &std::free);
-		if (values == nullptr || columnIndex == nullptr || rowPointer == nullptr || rowCount == nullptr) {
+		// The count of elements in the i-th row/column depending of the format (CSR/CSC)
+		std::unique_ptr<int[], decltype(&std::free)> count(static_cast<int*>(calloc(n, sizeof(int))), &std::free);
+		if (values == nullptr || positions == nullptr || start == nullptr || count == nullptr) {
 			assert(false);
 			denseRowCount = -1;
 			denseColCount = -1;
 			values.reset();
-			columnIndex.reset();
-			rowPointer.reset();
-			rowCount.reset();
+			positions.reset();
+			start.reset();
+			count.reset();
 			return;
 		}
 
 		for (const auto& el : triplet) {
 			if (format == CSFormat::CSR) {
-				rowCount[el.getRow()]++;
+				count[el.getRow()]++;
 			} else if (format == CSFormat::CSC) {
-				rowCount[el.getCol()]++;
+				count[el.getCol()]++;
 			}
 		}
 
-		rowPointer[0] = 0;
-		for (int i = 0; i < denseRowCount; ++i) {
-			rowPointer[i + 1] = rowCount[i] + rowPointer[i];
-			if (firstActiveRow == -1 && rowCount[i] > 0) {
-				firstActiveRow = i;
+		start[0] = 0;
+		for (int i = 0; i < n; ++i) {
+			start[i + 1] = count[i] + start[i];
+			if (firstActiveStart == -1 && count[i] > 0) {
+				firstActiveStart = i;
 			}
 		}
-		rowPointer[denseRowCount] = triplet.getNonZeroCount();
-		if (firstActiveRow == -1) {
-			firstActiveRow = getDenseRowCount();
+		start[n] = triplet.getNonZeroCount();
+		if (firstActiveStart == -1) {
+			firstActiveStart = n;
 		}
 
 		for (const auto& el : triplet) {
-			const int row = el.getRow();
-			const int index = rowPointer[row + 1] - rowCount[row];
+			const int startIndex = format == CSR ? el.getRow() : el.getCol();
+			const int index = start[startIndex + 1] - count[startIndex];
 			values[index] = el.getValue();
-			columnIndex[index] = el.getCol();
-			rowCount[row]--;
+			positions[index] = format == CSR ? el.getCol() : el.getRow();
+			count[startIndex]--;
 		}
 	}
 
 	template<CSFormat format>
 	CSMatrix<format>::CSMatrix(CSMatrix&& other) noexcept :
 		values(std::move(other.values)),
-		columnIndex(std::move(other.columnIndex)),
-		rowPointer(std::move(other.rowPointer)),
+		positions(std::move(other.positions)),
+		start(std::move(other.start)),
 		denseRowCount(other.denseRowCount),
 		denseColCount(other.denseColCount)
 	{
@@ -422,8 +428,8 @@ namespace SparseMatrix {
 	template<CSFormat format>
 	CSMatrix<format>& CSMatrix<format>::operator=(CSMatrix&& other) noexcept {
 		values = std::move(other.values);
-		columnIndex = std::move(other.columnIndex);
-		rowPointer = std::move(other.rowPointer);
+		positions = std::move(other.positions);
+		start = std::move(other.start);
 		denseRowCount = other.denseRowCount;
 		denseColCount = other.denseColCount;
 		other.denseRowCount = 0;
@@ -433,7 +439,7 @@ namespace SparseMatrix {
 
 	template<CSFormat format>
 	inline const int CSMatrix<format>::getNonZeroCount() const noexcept {
-		return rowPointer[denseRowCount];
+		return start[denseRowCount];
 	}
 
 	template<CSFormat format>
@@ -448,7 +454,7 @@ namespace SparseMatrix {
 
 	template<CSFormat format>
 	inline typename CSMatrix<format>::ConstIterator CSMatrix<format>::begin() const {
-		return ConstIterator(values.get(), columnIndex.get(), rowPointer.get(), firstActiveRow, 0);
+		return ConstIterator(values.get(), positions.get(), start.get(), firstActiveStart, 0);
 	}
 
 	template<CSFormat format>
@@ -456,11 +462,16 @@ namespace SparseMatrix {
 		const int nonZeroCount = getNonZeroCount();
 		return ConstIterator(
 			values.get(),
-			columnIndex.get(),
-			rowPointer.get(),
-			denseRowCount,
+			positions.get(),
+			start.get(),
+			getStartLength(),
 			nonZeroCount
 		);
+	}
+
+	template<CSFormat format>
+	inline const int CSMatrix<format>::getStartLength() const {
+		return format == CSR ? denseRowCount: denseColCount;
 	}
 
 	using CSRMatrix = CSMatrix<CSFormat::CSR>;
