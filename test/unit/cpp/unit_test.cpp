@@ -86,12 +86,11 @@ TEST(TripletMatrixTest, ToLinearDenseRowMajor) {
 	m.addEntry(3, 1, 0.4f);
 	m.addEntry(3, 3, 1.0f);
 
-	float* dense = static_cast<float*>(calloc(denseSize, sizeof(float)));
+	float dense[denseSize] = {};
 	SparseMatrix::toLinearDenseRowMajor(m, dense);
 	for (int i = 0; i < denseSize; ++i) {
 		EXPECT_NEAR(dense[i], denseRef[i], 10e-6);
 	}
-	free(dense);
 }
 
 // ==========================================================================
@@ -195,12 +194,11 @@ TEST(CSRMatrixTest, ToLinearDenseRowMajor) {
 	SparseMatrix::CSRMatrix csr(triplet);
 	EXPECT_TRUE(triplet.getNonZeroCount(), csr.getNonZeroCount());
 
-	float* dense = static_cast<float*>(calloc(denseSize, sizeof(float)));
+	float dense[denseSize] = {};
 	SparseMatrix::toLinearDenseRowMajor(csr, dense);
 	for (int i = 0; i < denseSize; ++i) {
 		EXPECT_EQ(dense[i], denseRef[i]);
 	}
-	free(dense);
 }
 
 // ==========================================================================
@@ -227,7 +225,7 @@ TEST(CSCMatrixTest, ConstructFromTriplet) {
 	triplet.addEntry(1, 1, 1.0f);
 	triplet.addEntry(2, 2, 1.0f);
 	triplet.addEntry(1, 1, 5.0f);
-	triplet.addEntry(3, 5, 10.0f);
+	triplet.addEntry(5, 3, 10.0f);
 
 	SparseMatrix::CSCMatrix csc(triplet);
 	EXPECT_EQ(csc.getDenseRowCount(), triplet.getDenseRowCount());
@@ -304,10 +302,9 @@ TEST(CSCMatrixTest, ToLinearDenseRowMajor) {
 	SparseMatrix::CSCMatrix csc(triplet);
 	EXPECT_TRUE(triplet.getNonZeroCount(), csc.getNonZeroCount());
 
-	float* dense = static_cast<float*>(calloc(denseSize, sizeof(float)));
+	float dense[denseSize] = {};
 	SparseMatrix::toLinearDenseRowMajor(csc, dense);
 	for (int i = 0; i < denseSize; ++i) {
 		EXPECT_EQ(dense[i], denseRef[i]);
 	}
-	free(dense);
 }
