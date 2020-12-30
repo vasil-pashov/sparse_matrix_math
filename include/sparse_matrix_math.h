@@ -285,22 +285,28 @@ namespace SparseMatrix {
 		swap(a.currentElement, b.currentElement);
 	}
 
+	enum CSFormat {
+		CSR, ///< (C)ompressed (S)parse (R)ow
+		CSC ///< (C)ompressed (S)parse (C)olumn
+	};
 	/// @brief Matrix in compressed sparse row format
 	/// Compressed sparse row format is represented with 3 arrays. One for the values,
 	/// one to keep track nonzero columns for each row, one to keep track where each row starts
 	/// The columns in each row are not ordered in any particular way (i.e. in ascending order)
-	class CSRMatrix {
+	
+	template<CSFormat format>
+	class CSMatrix {
 	public:
 		using ConstIterator = CSConstIterator;
 		/// @brief Initialize matrix in compressed sparse row format from a given matrix into triplet format
 		/// In case that the constructor could not allocate the needed amount of memory,
 		/// denseRowCount and denseColCount are set to -1 and all memory that was allocated will be freed.
 		/// @param[in] tripletMatrix Matrix in triplet format from which CSR matrix will be created
-		explicit CSRMatrix(const TripletMatrix& tripletMatrix) noexcept;
-		CSRMatrix(CSRMatrix&&) noexcept;
-		CSRMatrix& operator=(CSRMatrix&&) noexcept;
-		CSRMatrix(const CSRMatrix&) = delete;
-		CSRMatrix& operator=(const CSRMatrix&) = delete;
+		explicit CSMatrix(const TripletMatrix& tripletMatrix) noexcept;
+		CSMatrix(CSMatrix&&) noexcept;
+		CSMatrix& operator=(CSMatrix&&) noexcept;
+		CSMatrix(const CSMatrix&) = delete;
+		CSMatrix& operator=(const CSMatrix&) = delete;
 		/// @brief Get the number of trivial nonzero entries in the matrix
 		/// Trivial nonzero entries do not include zero elements which came from numerical cancellation
 		/// @return The number of trivial nonzero entries in the matrix
@@ -335,7 +341,8 @@ namespace SparseMatrix {
 		int firstActiveRow; ///< Index of the first row which contains nonzero elements
 	};
 
-	CSRMatrix::CSRMatrix(const TripletMatrix& triplet) noexcept :
+	template<CSFormat format>
+	CSMatrix<format>::CSMatrix(const TripletMatrix& triplet) noexcept :
 		values(new float[triplet.getNonZeroCount()]),
 		columnIndex(new int[triplet.getNonZeroCount()]),
 		rowPointer(new int[triplet.getDenseRowCount() + 1]),
@@ -343,6 +350,7 @@ namespace SparseMatrix {
 		denseColCount(triplet.getDenseColCount()),
 		firstActiveRow(-1)
 	{
+		static_assert(format == CSFormat::CSC || format == CSFormat::CSR, "Undefined matrix format");
 		// Calloc was proven to be faster than new [rows]()
 		std::unique_ptr<int[], decltype(&std::free)> rowCount(static_cast<int*>(calloc(denseRowCount, sizeof(int))), &std::free);
 		if (values == nullptr || columnIndex == nullptr || rowPointer == nullptr || rowCount == nullptr) {
@@ -357,7 +365,11 @@ namespace SparseMatrix {
 		}
 
 		for (const auto& el : triplet) {
-			rowCount[el.getRow()]++;
+			if (format == CSFormat::CSR) {
+				rowCount[el.getRow()]++;
+			} else if (format == CSFormat::CSC) {
+				rowCount[el.getCol()]++;
+			}
 		}
 
 		rowPointer[0] = 0;
@@ -381,7 +393,8 @@ namespace SparseMatrix {
 		}
 	}
 
-	CSRMatrix::CSRMatrix(CSRMatrix&& other) noexcept :
+	template<CSFormat format>
+	CSMatrix<format>::CSMatrix(CSMatrix&& other) noexcept :
 		values(std::move(other.values)),
 		columnIndex(std::move(other.columnIndex)),
 		rowPointer(std::move(other.rowPointer)),
@@ -392,7 +405,8 @@ namespace SparseMatrix {
 		other.denseColCount = 0;
 	}
 
-	CSRMatrix& CSRMatrix::operator=(CSRMatrix&& other) noexcept {
+	template<CSFormat format>
+	CSMatrix<format>& CSMatrix<format>::operator=(CSMatrix&& other) noexcept {
 		values = std::move(other.values);
 		columnIndex = std::move(other.columnIndex);
 		rowPointer = std::move(other.rowPointer);
@@ -403,23 +417,28 @@ namespace SparseMatrix {
 		return *this;
 	}
 
-	inline const int CSRMatrix::getNonZeroCount() const noexcept {
+	template<CSFormat format>
+	inline const int CSMatrix<format>::getNonZeroCount() const noexcept {
 		return rowPointer[denseRowCount];
 	}
 
-	inline const int CSRMatrix::getDenseRowCount() const noexcept {
+	template<CSFormat format>
+	inline const int CSMatrix<format>::getDenseRowCount() const noexcept {
 		return denseRowCount;
 	}
 
-	inline const int CSRMatrix::getDenseColCount() const noexcept {
+	template<CSFormat format>
+	inline const int CSMatrix<format>::getDenseColCount() const noexcept {
 		return denseColCount;
 	}
 
-	inline CSConstIterator CSRMatrix::begin() const {
+	template<CSFormat format>
+	inline CSConstIterator CSMatrix<format>::begin() const {
 		return CSConstIterator(values.get(), columnIndex.get(), rowPointer.get(), firstActiveRow, 0);
 	}
 
-	inline CSConstIterator CSRMatrix::end() const {
+	template<CSFormat format>
+	inline CSConstIterator CSMatrix<format>::end() const {
 		const int nonZeroCount = getNonZeroCount();
 		return CSConstIterator(
 			values.get(),
@@ -429,6 +448,9 @@ namespace SparseMatrix {
 			nonZeroCount
 		);
 	}
+
+	using CSRMatrix = CSMatrix<CSFormat::CSR>;
+	using CSCMatrix = CSMatrix<CSFormat::CSC>;
 
 	/// @brief Function to convert matrix from compressed sparse row format to dense row major matrix
 	/// Out must be allocated and filled with zero before being passed to the function
