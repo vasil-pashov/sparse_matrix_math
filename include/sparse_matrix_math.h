@@ -238,12 +238,20 @@ namespace SparseMatrix {
 
 	template<CSFormat format>
 	const int CSConstIterator<format>::CSElement::getRow() const noexcept {
-		return currentStartIndex;
+		if (format == CSR) {
+			return currentStartIndex;
+		} else if (format == CSC) {
+			return positions[currentPositionIndex];
+		}
 	}
 
 	template<CSFormat format>
 	const int CSConstIterator<format>::CSElement::getCol() const noexcept {
-		return positions[currentPositionIndex];
+		if (format == CSC) {
+			return currentStartIndex;
+		} else if (format == CSR) {
+			return positions[currentPositionIndex];
+		}
 	}
 
 	template<CSFormat format>
