@@ -139,27 +139,27 @@ namespace SparseMatrix {
 	}
 
 	/// @brief Const forward iterator for matrix in compressed sparse row format
-	class CSRConstIterator {
+	class CSConstIterator {
 	private:
-		class CSRElement {
-		friend class CSRConstIterator;
+		class CSElement {
+		friend class CSConstIterator;
 		public:
 			const int getRow() const noexcept;
 			const int getCol() const noexcept;
 			const float getValue() const noexcept;
-			friend void swap(CSRElement& a, CSRElement& b) noexcept;
+			friend void swap(CSElement& a, CSElement& b) noexcept;
 		private:
-			CSRElement(
+			CSElement(
 				const float* values,
 				const int* columnIndex,
 				const int* rowPointer,
 				const int currentRow,
 				const int currentColumIndex
 			) noexcept;
-			const bool operator==(const CSRElement& other) const noexcept;
+			const bool operator==(const CSElement& other) const noexcept;
 
-			CSRElement(const CSRElement&) = default;
-			CSRElement& operator=(const CSRElement&) = default;
+			CSElement(const CSElement&) = default;
+			CSElement& operator=(const CSElement&) = default;
 
 			const float* values;
 			const int* columnIndex;
@@ -167,35 +167,35 @@ namespace SparseMatrix {
 			int currentRow;
 			int currentColumnIndex;
 		};
-		friend void swap(CSRElement& a, CSRElement& b) noexcept;
+		friend void swap(CSElement& a, CSElement& b) noexcept;
 	public:
 		using iterator_category = std::forward_iterator_tag;
-		using value_type = CSRElement;
-		using pointer = const CSRElement*;
-		using reference = const CSRElement&;
+		using value_type = CSElement;
+		using pointer = const CSElement*;
+		using reference = const CSElement&;
 
-		CSRConstIterator() = default;
-		CSRConstIterator(
+		CSConstIterator() = default;
+		CSConstIterator(
 			const float* values,
 			const int* columnPointer,
 			const int* rowPointer,
 			const int currentRow,
 			const int currentColumnIndex
 		) noexcept;
-		CSRConstIterator(const CSRConstIterator&) = default;
-		CSRConstIterator& operator=(const CSRConstIterator&) = default;
+		CSConstIterator(const CSConstIterator&) = default;
+		CSConstIterator& operator=(const CSConstIterator&) = default;
 		reference operator*() const;
 		pointer operator->() const;
-		const bool operator==(const CSRConstIterator& other) const noexcept;
-		const bool operator!=(const CSRConstIterator& other) const noexcept;
-		CSRConstIterator& operator++() noexcept;
-		CSRConstIterator operator++(int) noexcept;
-		friend void swap(CSRConstIterator& a, CSRConstIterator& b) noexcept;
+		const bool operator==(const CSConstIterator& other) const noexcept;
+		const bool operator!=(const CSConstIterator& other) const noexcept;
+		CSConstIterator& operator++() noexcept;
+		CSConstIterator operator++(int) noexcept;
+		friend void swap(CSConstIterator& a, CSConstIterator& b) noexcept;
 	private:
-		CSRElement currentElement;
+		CSElement currentElement;
 	};
 
-	CSRConstIterator::CSRElement::CSRElement(
+	CSConstIterator::CSElement::CSElement(
 		const float* values,
 		const int* columnIndex,
 		const int* rowPointer,
@@ -209,19 +209,19 @@ namespace SparseMatrix {
 		currentColumnIndex(currentColumnIndex) {
 	}
 
-	const int CSRConstIterator::CSRElement::getRow() const noexcept {
+	const int CSConstIterator::CSElement::getRow() const noexcept {
 		return currentRow;
 	}
 
-	const int CSRConstIterator::CSRElement::getCol() const noexcept {
+	const int CSConstIterator::CSElement::getCol() const noexcept {
 		return columnIndex[currentColumnIndex];
 	}
 
-	const float CSRConstIterator::CSRElement::getValue() const noexcept {
+	const float CSConstIterator::CSElement::getValue() const noexcept {
 		return values[currentColumnIndex];
 	}
 
-	const bool CSRConstIterator::CSRElement::operator==(const CSRElement& other) const noexcept {
+	const bool CSConstIterator::CSElement::operator==(const CSElement& other) const noexcept {
 		return values == other.values &&
 			columnIndex == other.columnIndex &&
 			rowPointer == other.rowPointer &&
@@ -229,7 +229,7 @@ namespace SparseMatrix {
 			currentColumnIndex == other.currentColumnIndex;
 	}
 
-	void swap(CSRConstIterator::CSRElement& a, CSRConstIterator::CSRElement& b) noexcept {
+	void swap(CSConstIterator::CSElement& a, CSConstIterator::CSElement& b) noexcept {
 		using std::swap;
 		swap(a.values, b.values);
 		swap(a.columnIndex, b.columnIndex);
@@ -238,7 +238,7 @@ namespace SparseMatrix {
 		swap(a.currentColumnIndex, b.currentColumnIndex);
 	}
 
-	CSRConstIterator::CSRConstIterator(
+	CSConstIterator::CSConstIterator(
 		const float* values,
 		const int* columnIndex,
 		const int* rowPointer,
@@ -248,23 +248,23 @@ namespace SparseMatrix {
 		currentElement(values, columnIndex, rowPointer, currentRow, currentColumIndex)
 	{ }
 
-	inline CSRConstIterator::reference CSRConstIterator::operator*() const {
+	inline CSConstIterator::reference CSConstIterator::operator*() const {
 		return currentElement;
 	}
 
-	inline CSRConstIterator::pointer CSRConstIterator::operator->() const {
+	inline CSConstIterator::pointer CSConstIterator::operator->() const {
 		return &currentElement;
 	}
 
-	inline const bool CSRConstIterator::operator==(const CSRConstIterator& other) const noexcept {
+	inline const bool CSConstIterator::operator==(const CSConstIterator& other) const noexcept {
 		return currentElement == other.currentElement;
 	}
 
-	inline const bool CSRConstIterator::operator!=(const CSRConstIterator& other) const noexcept {
+	inline const bool CSConstIterator::operator!=(const CSConstIterator& other) const noexcept {
 		return !(*this == other);
 	}
 
-	CSRConstIterator& CSRConstIterator::operator++() noexcept {
+	CSConstIterator& CSConstIterator::operator++() noexcept {
 		currentElement.currentColumnIndex++;
 		assert(currentElement.currentColumnIndex <= currentElement.rowPointer[currentElement.currentRow + 1]);
 		if (currentElement.currentColumnIndex == currentElement.rowPointer[currentElement.currentRow + 1]) {
@@ -275,13 +275,13 @@ namespace SparseMatrix {
 		return *this;
 	}
 
-	CSRConstIterator CSRConstIterator::operator++(int) noexcept {
-		CSRConstIterator initialState = *this;
+	CSConstIterator CSConstIterator::operator++(int) noexcept {
+		CSConstIterator initialState = *this;
 		++(*this);
 		return initialState;
 	}
 
-	inline void swap(CSRConstIterator& a, CSRConstIterator& b) noexcept {
+	inline void swap(CSConstIterator& a, CSConstIterator& b) noexcept {
 		swap(a.currentElement, b.currentElement);
 	}
 
@@ -291,7 +291,7 @@ namespace SparseMatrix {
 	/// The columns in each row are not ordered in any particular way (i.e. in ascending order)
 	class CSRMatrix {
 	public:
-		using ConstIterator = CSRConstIterator;
+		using ConstIterator = CSConstIterator;
 		/// @brief Initialize matrix in compressed sparse row format from a given matrix into triplet format
 		/// In case that the constructor could not allocate the needed amount of memory,
 		/// denseRowCount and denseColCount are set to -1 and all memory that was allocated will be freed.
@@ -315,10 +315,10 @@ namespace SparseMatrix {
 		/// The rows are guaranteed to be iterated in nondecreasing order
 		/// There is no particular order in which the columns will be iterated
 		/// @return Forward iterator to the beginning of the matrix
-		CSRConstIterator begin() const;
+		CSConstIterator begin() const;
 		/// @brief Iterator to one element past the last element in the matrix
 		/// Dereferencing this iterator results in undefined behavior.
-		CSRConstIterator end() const;
+		CSConstIterator end() const;
 	private:
 		/// @brief Array which will hold all nonzero entries of the matrix
 		/// This is of length  number of nonzero entries
@@ -415,13 +415,13 @@ namespace SparseMatrix {
 		return denseColCount;
 	}
 
-	inline CSRConstIterator CSRMatrix::begin() const {
-		return CSRConstIterator(values.get(), columnIndex.get(), rowPointer.get(), firstActiveRow, 0);
+	inline CSConstIterator CSRMatrix::begin() const {
+		return CSConstIterator(values.get(), columnIndex.get(), rowPointer.get(), firstActiveRow, 0);
 	}
 
-	inline CSRConstIterator CSRMatrix::end() const {
+	inline CSConstIterator CSRMatrix::end() const {
 		const int nonZeroCount = getNonZeroCount();
-		return CSRConstIterator(
+		return CSConstIterator(
 			values.get(),
 			columnIndex.get(),
 			rowPointer.get(),
