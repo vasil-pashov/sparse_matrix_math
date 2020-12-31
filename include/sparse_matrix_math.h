@@ -16,15 +16,16 @@ namespace SparseMatrix {
 	/// various arithmetic functions.
 	class TripletMatrix {
 	private:
-		struct Triplet {
+		class TripletEl {
+		public:
 			friend class TripletMatrix;
-			Triplet(int row, int col, float value) noexcept :
+			TripletEl(int row, int col, float value) noexcept :
 				row(row),
 				col(col),
-				value(value)
-			{ }
-			Triplet(const Triplet&) noexcept = default;
-			Triplet(Triplet&&) noexcept = default;
+				value(value) {
+			}
+			TripletEl(const TripletEl&) noexcept = default;
+			TripletEl(TripletEl&&) noexcept = default;
 			const int getRow() const noexcept {
 				return row;
 			}
@@ -39,7 +40,7 @@ namespace SparseMatrix {
 			float value;
 		};
 	public:
-		using ConstIterator = std::vector<Triplet>::const_iterator;
+		using ConstIterator = std::vector<TripletEl>::const_iterator;
 		/// @brief Initialize triplet matrix with given number of rows and columns
 		/// The number of rows and columns does not have any affect the space allocated by the matrix
 		/// @param[in] rowCount Number of rows which the dense form of the matrix is supposed to have
@@ -82,7 +83,7 @@ namespace SparseMatrix {
 		/// @brief List of triplets. Array of structures is chosen since converting to
 		/// compressed sparse format requires iteration over all triplets and this format
 		/// is more cache friendly.
-		std::vector<Triplet> data;
+		std::vector<TripletEl> data;
 		/// @brief Keep track of repeating indexes
 		/// Key is unique representation of the matrix index (first 32 bits are the col second are the row)
 		/// The value is index into the data array of triplets where the element is
@@ -143,86 +144,38 @@ namespace SparseMatrix {
 		CSC ///< (C)ompressed (S)parse (C)olumn
 	};
 
-	/// @brief Const forward iterator for matrix in compressed sparse row format
-	/// @tparam format CSFormat of the matrix. If CSR calling pre/post-fix operator++ is guaranteed
-	/// to iterate over rows in non-descending fashion and eventually will reach the end of the matrix.
-	/// If CSR calling pre / post - fix operator++ is guaranteed
-	/// to iterate over columns in non-descending fashion and eventually will reach the end of the matrix.
-	template<CSFormat format>
-	class CSConstIterator {
-	private:
-		class CSElement {
-		friend class CSConstIterator;
-		public:
-			const int getRow() const noexcept;
-			const int getCol() const noexcept;
-			const float getValue() const noexcept;
-			friend void swap(CSElement& a, CSElement& b) noexcept;
-		private:
-			CSElement(
-				const float* values,
-				const int* positions,
-				const int* start,
-				const int currentStartIndex,
-				const int currentPositionIndex
-			) noexcept;
-			const bool operator==(const CSElement& other) const noexcept;
-
-			CSElement(const CSElement&) = default;
-			CSElement& operator=(const CSElement&) = default;
-
-			/// Non owning pointer to the list of non zero elements of the matrix
-			const float* values;
-			/// If format is CSR this is the column if the i-th value
-			/// If format is CSC this is the row of the i-th value
-			const int* positions;
-			/// If format is CSR i-th element is index in positions and values where the i-th row starts
-			/// If format is CSC i-th element is index in positions and values where the i-th column starts
-			const int* start;
-			/// Index into start for the element which the iterator is pointing to
-			int currentStartIndex;
-			/// Index into positions for the element which the iterator is pointing to
-			int currentPositionIndex;
-		};
-
-		friend void swap(CSConstIterator<format>::CSElement& a, CSConstIterator<format>::CSElement& b) noexcept {
-			using std::swap;
-			swap(a.values, b.values);
-			swap(a.columnIndex, b.columnIndex);
-			swap(a.start, b.start);
-			swap(a.currentStartIndex, b.currentStartIndex);
-			swap(a.currentPositionIndex, b.currentPositionIndex);
-		}
-
+	class CSElement {
 	public:
-		using iterator_category = std::forward_iterator_tag;
-		using value_type = CSConstIterator::CSElement;
-		using pointer = const CSConstIterator::CSElement*;
-		using reference = const CSConstIterator::CSElement&;
-
-		CSConstIterator() = default;
-		CSConstIterator(
+		const float getValue() const noexcept;
+		friend void swap(CSElement& a, CSElement& b) noexcept;
+	protected:
+		CSElement(
 			const float* values,
 			const int* positions,
 			const int* start,
 			const int currentStartIndex,
 			const int currentPositionIndex
 		) noexcept;
-		CSConstIterator(const CSConstIterator&) = default;
-		CSConstIterator& operator=(const CSConstIterator&) = default;
-		reference operator*() const;
-		pointer operator->() const;
-		const bool operator==(const CSConstIterator& other) const noexcept;
-		const bool operator!=(const CSConstIterator& other) const noexcept;
-		CSConstIterator& operator++() noexcept;
-		CSConstIterator operator++(int) noexcept;
-		friend void swap(CSConstIterator& a, CSConstIterator& b) noexcept;
-	private:
-		CSElement currentElement;
+
+		CSElement(const CSElement&) = default;
+		CSElement& operator=(const CSElement&) = default;
+		const bool operator==(const CSElement&) const;
+
+		/// Non owning pointer to the list of non zero elements of the matrix
+		const float* values;
+		/// If format is CSR this is the column if the i-th value
+		/// If format is CSC this is the row of the i-th value
+		const int* positions;
+		/// If format is CSR i-th element is index in positions and values where the i-th row starts
+		/// If format is CSC i-th element is index in positions and values where the i-th column starts
+		const int* start;
+		/// Index into start for the element which the iterator is pointing to
+		int currentStartIndex;
+		/// Index into positions for the element which the iterator is pointing to
+		int currentPositionIndex;
 	};
 
-	template<CSFormat format>
-	CSConstIterator<format>::CSElement::CSElement(
+	CSElement::CSElement(
 		const float* values,
 		const int* positions,
 		const int* start,
@@ -236,40 +189,59 @@ namespace SparseMatrix {
 		currentPositionIndex(currentPositionIndex) {
 	}
 
-	template<CSFormat format>
-	const int CSConstIterator<format>::CSElement::getRow() const noexcept {
-		if (format == CSR) {
-			return currentStartIndex;
-		} else if (format == CSC) {
-			return positions[currentPositionIndex];
-		}
-	}
-
-	template<CSFormat format>
-	const int CSConstIterator<format>::CSElement::getCol() const noexcept {
-		if (format == CSC) {
-			return currentStartIndex;
-		} else if (format == CSR) {
-			return positions[currentPositionIndex];
-		}
-	}
-
-	template<CSFormat format>
-	const float CSConstIterator<format>::CSElement::getValue() const noexcept {
+	const float CSElement::getValue() const noexcept {
 		return values[currentPositionIndex];
 	}
 
-	template<CSFormat format>
-	const bool CSConstIterator<format>::CSElement::operator==(const CSElement& other) const noexcept {
-		return values == other.values &&
-			positions == other.positions &&
-			start == other.start &&
-			currentStartIndex == other.currentStartIndex &&
-			currentPositionIndex == other.currentPositionIndex;
+	void swap(CSElement& a, CSElement& b) noexcept {
+		using std::swap;
+		swap(a.values, b.values);
+		swap(a.positions, b.positions);
+		swap(a.start, b.start);
+		swap(a.currentStartIndex, b.currentStartIndex);
+		swap(a.currentPositionIndex, b.currentPositionIndex);
 	}
 
-	template<CSFormat format>
-	CSConstIterator<format>::CSConstIterator(
+	const bool CSElement::operator==(const CSElement& other) const {
+		return other.values == values &&
+			other.positions == positions &&
+			other.start == start &&
+			other.currentStartIndex == currentStartIndex &&
+			other.currentPositionIndex == currentPositionIndex;
+	}
+
+	/// @brief Base class for const forward iterator for matrix in compressed sparse row format
+	template<typename CSElement>
+	class CSConstIterator {
+	public:
+		using iterator_category = std::forward_iterator_tag;
+		using value_type = CSElement;
+		using pointer = const CSElement*;
+		using reference = const CSElement&;
+
+		CSConstIterator() = default;
+		CSConstIterator(
+			const float* values,
+			const int* positions,
+			const int* start,
+			const int currentStartIndex,
+			const int currentPositionIndex
+		) noexcept;
+		CSConstIterator(const CSConstIterator&) = default;
+		CSConstIterator& operator=(const CSConstIterator&) = default;
+		const bool operator==(const CSConstIterator& other) const noexcept;
+		const bool operator!=(const CSConstIterator& other) const noexcept;
+		reference operator*() const;
+		pointer operator->() const;
+		CSConstIterator& operator++() noexcept;
+		CSConstIterator operator++(int) noexcept;
+		friend void swap(CSConstIterator& a, CSConstIterator& b) noexcept;
+	private:
+		CSElement currentElement;
+	};
+
+	template<typename CSElement>
+	CSConstIterator<CSElement>::CSConstIterator(
 		const float* values,
 		const int* positions,
 		const int* start,
@@ -279,28 +251,28 @@ namespace SparseMatrix {
 		currentElement(values, positions, start, currentStartIndex, currentPositionIndex)
 	{ }
 
-	template<CSFormat format>
-	inline typename CSConstIterator<format>::reference CSConstIterator<format>::operator*() const {
+	template<typename CSElement>
+	inline typename CSConstIterator<CSElement>::reference CSConstIterator<CSElement>::operator*() const {
 		return currentElement;
 	}
 
-	template<CSFormat format>
-	inline typename CSConstIterator<format>::pointer CSConstIterator<format>::operator->() const {
+	template<typename CSElement>
+	inline typename CSConstIterator<CSElement>::pointer CSConstIterator<CSElement>::operator->() const {
 		return &currentElement;
 	}
 
-	template<CSFormat format>
-	inline const bool CSConstIterator<format>::operator==(const CSConstIterator& other) const noexcept {
+	template<typename CSElement>
+	inline const bool CSConstIterator<CSElement>::operator==(const CSConstIterator& other) const noexcept {
 		return currentElement == other.currentElement;
 	}
 
-	template<CSFormat format>
-	inline const bool CSConstIterator<format>::operator!=(const CSConstIterator& other) const noexcept {
+	template<typename CSElement>
+	inline const bool CSConstIterator<CSElement>::operator!=(const CSConstIterator& other) const noexcept {
 		return !(*this == other);
 	}
 
-	template<CSFormat format>
-	CSConstIterator<format>& CSConstIterator<format>::operator++() noexcept {
+	template<typename CSElement>
+	CSConstIterator<CSElement>& CSConstIterator<CSElement>::operator++() noexcept {
 		currentElement.currentPositionIndex++;
 		assert(currentElement.currentPositionIndex <= currentElement.start[currentElement.currentStartIndex + 1]);
 		if (currentElement.currentPositionIndex == currentElement.start[currentElement.currentStartIndex + 1]) {
@@ -311,54 +283,99 @@ namespace SparseMatrix {
 		return *this;
 	}
 
-	template<CSFormat format>
-	CSConstIterator<format> CSConstIterator<format>::operator++(int) noexcept {
+	template<typename CSElement>
+	CSConstIterator<CSElement> CSConstIterator<CSElement>::operator++(int) noexcept {
 		CSConstIterator initialState = *this;
 		++(*this);
 		return initialState;
 	}
 
-	template<CSFormat format>
-	inline void swap(CSConstIterator<format>& a, CSConstIterator<format>& b) noexcept {
+	template<typename CSElement>
+	inline void swap(CSConstIterator<CSElement>& a, CSConstIterator<CSElement>& b) noexcept {
 		swap(a.currentElement, b.currentElement);
 	}
 
-	/// @brief Matrix in compressed sparse row format
+	class CSRElement : public CSElement {
+		friend class CSConstIterator<CSRElement>;
+	public:
+		CSRElement(
+			const float* values,
+			const int* positions,
+			const int* start,
+			const int currentStartIndex,
+			const int currentPositionIndex
+		) noexcept;
+		const int getRow() const noexcept {
+			return currentStartIndex;
+		}
+
+		const int getCol() const noexcept {
+			return positions[currentPositionIndex];
+		}
+	};
+
+	CSRElement::CSRElement(
+		const float* values,
+		const int* positions,
+		const int* start,
+		const int currentStartIndex,
+		const int currentPositionIndex
+	) noexcept :
+		CSElement(values, positions, start, currentStartIndex, currentPositionIndex)
+	{ }
+
+	class CSCElement : public CSElement {
+		friend class CSConstIterator<CSCElement>;
+	public:
+		CSCElement(
+			const float* values,
+			const int* positions,
+			const int* start,
+			const int currentStartIndex,
+			const int currentPositionIndex
+		) noexcept;
+		const int getRow() const noexcept {
+			return positions[currentPositionIndex];
+		}
+
+		const int getCol() const noexcept {
+			return currentStartIndex;
+		}
+	};
+
+	CSCElement::CSCElement(
+		const float* values,
+		const int* positions,
+		const int* start,
+		const int currentStartIndex,
+		const int currentPositionIndex
+	) noexcept :
+		CSElement(values, positions, start, currentStartIndex, currentPositionIndex) 			{
+ }
+
+	/// @brief Base class for matrix in compressed sparse row format
 	/// Compressed sparse row format is represented with 3 arrays. One for the values,
-	/// one to keep track nonzero columns for each row, one to keep track where each row starts
-	/// The columns in each row are not ordered in any particular way (i.e. in ascending order)
-	template<CSFormat format>
+	/// one to keep track nonzero columns/rows for each row/column, one to keep track where each row/column starts
 	class CSMatrix {
 	public:
-		using ConstIterator = CSConstIterator<format>;
-		/// @brief Initialize matrix in compressed sparse row format from a given matrix into triplet format
-		/// In case that the constructor could not allocate the needed amount of memory,
-		/// denseRowCount and denseColCount are set to -1 and all memory that was allocated will be freed.
-		/// @param[in] tripletMatrix Matrix in triplet format from which CSR matrix will be created
-		explicit CSMatrix(const TripletMatrix& tripletMatrix) noexcept;
-		CSMatrix(CSMatrix&&) noexcept;
-		CSMatrix& operator=(CSMatrix&&) noexcept;
 		CSMatrix(const CSMatrix&) = delete;
 		CSMatrix& operator=(const CSMatrix&) = delete;
-		/// @brief Get the number of trivial nonzero entries in the matrix
-		/// Trivial nonzero entries do not include zero elements which came from numerical cancellation
-		/// @return The number of trivial nonzero entries in the matrix
-		const int getNonZeroCount() const noexcept;
 		/// @brief Get the total number of rows of the matrix
 		/// @return The row count which dense matrix is supposed to have (not only the stored ones)
 		const int getDenseRowCount() const noexcept;
 		/// @brief Get the total number of cols of the matrix
 		/// @return The column count which dense matrix is supposed to have (not only the stored ones)
 		const int getDenseColCount() const noexcept;
-		/// @brief Get forward iterator to the starting from the beginning of the matrix
-		/// The rows are guaranteed to be iterated in nondecreasing order
-		/// There is no particular order in which the columns will be iterated
-		/// @return Forward iterator to the beginning of the matrix
-		ConstIterator begin() const;
-		/// @brief Iterator to one element past the last element in the matrix
-		/// Dereferencing this iterator results in undefined behavior.
-		ConstIterator end() const;
-	private:
+	protected:
+		/// May fail due to insufficient memory
+		CSMatrix(
+			const int nonZeroCount,
+			const int startSize,
+			const int denseRowCount,
+			const int denseColumnCount
+		) noexcept;
+		CSMatrix(CSMatrix&&) noexcept = default;
+		CSMatrix& operator=(CSMatrix&&) noexcept = default;
 		/// Array which will hold all nonzero entries of the matrix.
 		/// This is of length  number of nonzero entries
 		std::unique_ptr<float[]> values;
@@ -373,128 +390,160 @@ namespace SparseMatrix {
 		/// Index in start array. If format is CSR the first row which has nonzero element in it
 		/// If format is CSC the first column which has nonzero element in it
 		int firstActiveStart;
-		/// Get the length of the start array as it depends on the CSFormat of the matrix
-		/// @return Length of the start array
-		const int getStartLength() const;
+		/// @brief Release all allocated memory and set all counts to 0
+		void freeMem() noexcept;
+		
+		enum type {
+			CSR,
+			CSC
+		};
+
+		template<type t>
+		void fillArrays(const TripletMatrix& triplet) {
+			const int n = t == CSR ? getDenseRowCount() : getDenseColCount();
+			std::unique_ptr<int[], decltype(&free)> count(static_cast<int*>(calloc(n, sizeof(int))), &free);
+			if (count == nullptr) {
+				assert(false);
+				freeMem();
+			}
+
+			for (const auto& el : triplet) {
+				if (t == CSR) {
+					count[el.getRow()]++;
+				} else {
+					count[el.getCol()]++;
+				}
+			}
+
+			start[0] = 0;
+			for (int i = 0; i < n; ++i) {
+				start[i + 1] = start[i] + count[i];
+				if (firstActiveStart == -1 && start[i + 1] != 0) {
+					firstActiveStart = i;
+				}
+			}
+			if (firstActiveStart == -1) {
+				firstActiveStart = n;
+			}
+
+			for (const auto& el : triplet) {
+				const int startIdx = t == CSR ? el.getRow() : el.getCol();
+				const int currentCount = count[startIdx];;
+				const int position = start[startIdx + 1] - currentCount;
+				positions[position] = t == CSR ? el.getCol() : el.getRow();
+				values[position] = el.getValue();
+				count[startIdx]--;
+			}
+		}
 	};
 
-	template<CSFormat format>
-	CSMatrix<format>::CSMatrix(const TripletMatrix& triplet) noexcept :
-		values(new float[triplet.getNonZeroCount()]),
-		positions(new int[triplet.getNonZeroCount()]),
-		start(new int[(format == CSR ? triplet.getDenseRowCount() : triplet.getDenseColCount()) + 1]),
-		denseRowCount(triplet.getDenseRowCount()),
-		denseColCount(triplet.getDenseColCount()),
+	CSMatrix::CSMatrix(
+		const int nonZeroCount,
+		const int startSize,
+		const int denseRowCount,
+		const int denseColCount
+	) noexcept :
+		values(new float[nonZeroCount]),
+		positions(new int[nonZeroCount]),
+		start(new int[startSize]),
+		denseRowCount(denseRowCount),
+		denseColCount(denseColCount),
 		firstActiveStart(-1)
 	{
-		static_assert(format == CSFormat::CSC || format == CSFormat::CSR, "Undefined matrix format");
-		const int n = getStartLength();
-		// Calloc was proven to be faster than new [rows]()
-		// The count of elements in the i-th row/column depending of the format (CSR/CSC)
-		std::unique_ptr<int[], decltype(&std::free)> count(static_cast<int*>(calloc(n, sizeof(int))), &std::free);
-		if (values == nullptr || positions == nullptr || start == nullptr || count == nullptr) {
+		if (values == nullptr || positions == nullptr || start == nullptr) {
 			assert(false);
-			denseRowCount = -1;
-			denseColCount = -1;
-			values.reset();
-			positions.reset();
-			start.reset();
-			count.reset();
-			return;
-		}
-
-		for (const auto& el : triplet) {
-			if (format == CSFormat::CSR) {
-				count[el.getRow()]++;
-			} else if (format == CSFormat::CSC) {
-				count[el.getCol()]++;
-			}
-		}
-
-		start[0] = 0;
-		for (int i = 0; i < n; ++i) {
-			start[i + 1] = count[i] + start[i];
-			if (firstActiveStart == -1 && count[i] > 0) {
-				firstActiveStart = i;
-			}
-		}
-		start[n] = triplet.getNonZeroCount();
-		if (firstActiveStart == -1) {
-			firstActiveStart = n;
-		}
-
-		for (const auto& el : triplet) {
-			const int startIndex = format == CSR ? el.getRow() : el.getCol();
-			const int index = start[startIndex + 1] - count[startIndex];
-			values[index] = el.getValue();
-			positions[index] = format == CSR ? el.getCol() : el.getRow();
-			count[startIndex]--;
+			freeMem();
 		}
 	}
 
-	template<CSFormat format>
-	CSMatrix<format>::CSMatrix(CSMatrix&& other) noexcept :
-		values(std::move(other.values)),
-		positions(std::move(other.positions)),
-		start(std::move(other.start)),
-		denseRowCount(other.denseRowCount),
-		denseColCount(other.denseColCount)
-	{
-		other.denseRowCount = 0;
-		other.denseColCount = 0;
-	}
-
-	template<CSFormat format>
-	CSMatrix<format>& CSMatrix<format>::operator=(CSMatrix&& other) noexcept {
-		values = std::move(other.values);
-		positions = std::move(other.positions);
-		start = std::move(other.start);
-		denseRowCount = other.denseRowCount;
-		denseColCount = other.denseColCount;
-		other.denseRowCount = 0;
-		other.denseColCount = 0;
-		return *this;
-	}
-
-	template<CSFormat format>
-	inline const int CSMatrix<format>::getNonZeroCount() const noexcept {
-		return start[denseRowCount];
-	}
-
-	template<CSFormat format>
-	inline const int CSMatrix<format>::getDenseRowCount() const noexcept {
+	inline const int CSMatrix::getDenseRowCount() const noexcept {
 		return denseRowCount;
 	}
 
-	template<CSFormat format>
-	inline const int CSMatrix<format>::getDenseColCount() const noexcept {
+	inline const int CSMatrix::getDenseColCount() const noexcept {
 		return denseColCount;
 	}
 
-	template<CSFormat format>
-	inline typename CSMatrix<format>::ConstIterator CSMatrix<format>::begin() const {
-		return ConstIterator(values.get(), positions.get(), start.get(), firstActiveStart, 0);
+	inline void CSMatrix::freeMem() noexcept {
+		this->denseColCount = 0;
+		this->denseRowCount = 0;
+		values.reset();
+		positions.reset();
+		start.reset();
 	}
 
-	template<CSFormat format>
-	inline typename CSMatrix<format>::ConstIterator CSMatrix<format>::end() const {
-		const int nonZeroCount = getNonZeroCount();
-		return ConstIterator(
-			values.get(),
-			positions.get(),
-			start.get(),
-			getStartLength(),
-			nonZeroCount
-		);
+	class CSRMatrix : public CSMatrix {
+	public:
+		using ConstIterator = CSConstIterator<CSRElement>;
+		explicit CSRMatrix(const TripletMatrix& triplet) noexcept;
+		/// @brief Get the number of trivial nonzero entries in the matrix
+		/// Trivial nonzero entries do not include zero elements which came from numerical cancellation
+		/// @return The number of trivial nonzero entries in the matrix
+		const int getNonZeroCount() const noexcept;
+		/// Get constant iterator to the first nonzero element of the matrix
+		/// The iterator is guaranteed to iterate over rows in non descending fashion, eventually reaching the end of the matrix
+		/// There are no guarantees for the order of the columns in each row
+		/// @return Iterator to the first nonzero element of the matrix
+		ConstIterator begin() const noexcept;
+		/// @brief Iterator denoting the end of the matrix. Dereferencing it is undefined behavior.
+		/// @return Iterator denoting the end of the matrix.
+		ConstIterator end() const noexcept;
+	};
+
+	CSRMatrix::CSRMatrix(const TripletMatrix& triplet) noexcept:
+		CSMatrix(triplet.getNonZeroCount(), triplet.getDenseRowCount() + 1, triplet.getDenseRowCount(), triplet.getDenseColCount()) 
+	{
+		fillArrays<CSMatrix::CSR>(triplet);
 	}
 
-	template<CSFormat format>
-	inline const int CSMatrix<format>::getStartLength() const {
-		return format == CSR ? denseRowCount: denseColCount;
+	CSRMatrix::ConstIterator CSRMatrix::begin() const noexcept {
+		return ConstIterator(values.get(), positions.get(), start.get(), this->firstActiveStart, 0);
 	}
 
-	using CSRMatrix = CSMatrix<CSFormat::CSR>;
-	using CSCMatrix = CSMatrix<CSFormat::CSC>;
+	CSRMatrix::ConstIterator CSRMatrix::end() const noexcept {
+		return ConstIterator(values.get(), positions.get(), start.get(), getDenseRowCount(), getNonZeroCount());
+	}
+
+	inline const int CSRMatrix::getNonZeroCount() const noexcept {
+		return start[denseRowCount];
+	}
+
+	class CSCMatrix : public CSMatrix {
+	public:
+		using ConstIterator = CSConstIterator<CSCElement>;
+		explicit CSCMatrix(const TripletMatrix& triplet) noexcept;
+		/// @brief Get the number of trivial nonzero entries in the matrix
+		/// Trivial nonzero entries do not include zero elements which came from numerical cancellation
+		/// @return The number of trivial nonzero entries in the matrix
+		const int getNonZeroCount() const noexcept;
+		/// Get constant iterator to the first nonzero element of the matrix
+		/// The iterator is guaranteed to iterate over columns in non descending fashion, eventually reaching the end of the matrix
+		/// There are no guarantees for the order of the rows in each column
+		/// @return Iterator to the first nonzero element of the matrix
+		ConstIterator begin() const noexcept;
+		/// @brief Iterator denoting the end of the matrix. Dereferencing it is undefined behavior.
+		/// @return Iterator denoting the end of the matrix.
+		ConstIterator end() const noexcept;
+	};
+
+	CSCMatrix::CSCMatrix(const TripletMatrix& triplet) noexcept :
+		CSMatrix(triplet.getNonZeroCount(), triplet.getDenseColCount() + 1, triplet.getDenseRowCount(), triplet.getDenseColCount()) 
+	{
+		fillArrays<CSMatrix::CSC>(triplet);
+	}
+
+	CSCMatrix::ConstIterator CSCMatrix::begin() const noexcept {
+		return ConstIterator(values.get(), positions.get(), start.get(), this->firstActiveStart, 0);
+	}
+
+	CSCMatrix::ConstIterator CSCMatrix::end() const noexcept {
+		return ConstIterator(values.get(), positions.get(), start.get(), getDenseColCount(), getNonZeroCount());
+	}
+
+	inline const int CSCMatrix::getNonZeroCount() const noexcept {
+		return start[getDenseColCount()];
+	}
+
 
 	/// @brief Function to convert matrix from compressed sparse row format to dense row major matrix
 	/// Out must be allocated and filled with zero before being passed to the function
