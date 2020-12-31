@@ -367,6 +367,7 @@ namespace SparseMatrix {
 		/// @return The column count which dense matrix is supposed to have (not only the stored ones)
 		const int getDenseColCount() const noexcept;
 	protected:
+		CSMatrix() noexcept;
 		/// May fail due to insufficient memory
 		CSMatrix(
 			const int nonZeroCount,
@@ -392,6 +393,12 @@ namespace SparseMatrix {
 		int firstActiveStart;
 		/// @brief Release all allocated memory and set all counts to 0
 		void freeMem() noexcept;
+		const int init(
+			const int nonZeroCount,
+			const int startSize,
+			const int denseRowCount,
+			const int denseColumnCount
+		) noexcept;
 		
 		enum type {
 			CSR,
@@ -439,6 +446,12 @@ namespace SparseMatrix {
 		const int getNextStartIndex(int currentStartIndex, int startLength) const noexcept;
 	};
 
+	CSMatrix::CSMatrix() noexcept :
+		denseRowCount(0),
+		denseColCount(0),
+		firstActiveStart(0)
+	{ }
+
 	CSMatrix::CSMatrix(
 		const int nonZeroCount,
 		const int startSize,
@@ -481,10 +494,33 @@ namespace SparseMatrix {
 		return currentStartIndex;
 	}
 
+	const int CSMatrix::init(
+		const int nonZeroCount,
+		const int startSize,
+		const int denseRowCount,
+		const int denseColumnCount
+	) noexcept {
+		values.reset(new float[nonZeroCount]);
+		if (!values) { return 1; }
+
+		positions.reset(new int[nonZeroCount]);
+		if (!values) { return 1; }
+
+		start.reset(new int[startSize]);
+		if (!values) { return 1; }
+
+		this->denseRowCount = denseRowCount;
+		this->denseColCount = denseColCount;
+		this->firstActiveStart = -1;
+		return 0;
+	}
+
 	class CSRMatrix : public CSMatrix {
 	public:
 		using ConstIterator = CSConstIterator<CSRElement>;
+		CSRMatrix() = default;
 		explicit CSRMatrix(const TripletMatrix& triplet) noexcept;
+		int init(const TripletMatrix& triplet) noexcept;
 		/// @brief Get the number of trivial nonzero entries in the matrix
 		/// Trivial nonzero entries do not include zero elements which came from numerical cancellation
 		/// @return The number of trivial nonzero entries in the matrix
@@ -508,6 +544,16 @@ namespace SparseMatrix {
 		CSMatrix(triplet.getNonZeroCount(), triplet.getDenseRowCount() + 1, triplet.getDenseRowCount(), triplet.getDenseColCount()) 
 	{
 		fillArrays<CSMatrix::CSR>(triplet);
+	}
+
+	int CSRMatrix::init(const TripletMatrix& triplet) noexcept {
+		const int nnz = triplet.getNonZeroCount();
+		const int rows = triplet.getDenseRowCount();
+		const int cols = triplet.getDenseColCount();
+		int err = CSMatrix::init(nnz, rows + 1, rows, cols);
+		if (err) return err;
+		CSMatrix::fillArrays<CSR>(triplet);
+		return 0;
 	}
 
 	CSRMatrix::ConstIterator CSRMatrix::begin() const noexcept {
@@ -538,7 +584,9 @@ namespace SparseMatrix {
 	class CSCMatrix : public CSMatrix {
 	public:
 		using ConstIterator = CSConstIterator<CSCElement>;
+		CSCMatrix() = default;
 		explicit CSCMatrix(const TripletMatrix& triplet) noexcept;
+		int init(const TripletMatrix& triplet) noexcept;
 		/// @brief Get the number of trivial nonzero entries in the matrix
 		/// Trivial nonzero entries do not include zero elements which came from numerical cancellation
 		/// @return The number of trivial nonzero entries in the matrix
@@ -551,6 +599,11 @@ namespace SparseMatrix {
 		/// @brief Iterator denoting the end of the matrix. Dereferencing it is undefined behavior.
 		/// @return Iterator denoting the end of the matrix.
 		ConstIterator end() const noexcept;
+		/// @brief Multiply the matrix with the first argument being on the right hand side of the matrix and add the result to the second argument
+		/// The operation overrides the second argument
+		/// @param[in] mult Vector which will multiply the matrix (the vector being on the rhs of the matrix)
+		/// @param[in,out] add Vector which will be added to the result of the multiplication.
+		void rMultAdd(const float* const mult, float* const add) const noexcept;
 	};
 
 	CSCMatrix::CSCMatrix(const TripletMatrix& triplet) noexcept :
@@ -571,6 +624,29 @@ namespace SparseMatrix {
 		return start[getDenseColCount()];
 	}
 
+	int CSCMatrix::init(const TripletMatrix& triplet) noexcept {
+		const int nnz = triplet.getNonZeroCount();
+		const int rows = triplet.getDenseRowCount();
+		const int cols = triplet.getDenseColCount();
+		int err = CSMatrix::init(nnz, rows + 1, rows, cols);
+		if (err) return err;
+		CSMatrix::fillArrays<CSC>(triplet);
+		return 0;
+	}
+
+	void CSCMatrix::rMultAdd(const float* const mult, float* const add) const noexcept {
+		const int n = getDenseColCount();
+		for (int col = firstActiveStart; col < n; col = getNextStartIndex(col, n)) {
+			if (mult[col] == 0.0f) {
+				continue;
+			}
+			for (int rowIdx = start[col]; rowIdx < start[col + 1]; ++rowIdx) {
+				const int row = positions[rowIdx];
+				const float value = values[rowIdx];
+				add[row] = std::fma(value, mult[col], add[row]);
+			}
+		}
+	}
 
 	/// @brief Function to convert matrix from compressed sparse row format to dense row major matrix
 	/// Out must be allocated and filled with zero before being passed to the function

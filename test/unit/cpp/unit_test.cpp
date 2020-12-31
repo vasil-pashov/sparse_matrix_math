@@ -94,10 +94,19 @@ TEST(TripletMatrixTest, ToLinearDenseRowMajor) {
 }
 
 // ==========================================================================
-// ===================== Compressed Sparse Row Matrix =======================
+// ==================== COMPRESSED SPARSE MATRIX COMMON =====================
 // ==========================================================================
 
-TEST(CSRMatrixTest, ConstrcutFromEmptyTriplet) {
+
+template <typename CSMatrix_t>
+class CSMatrixCtorTest : public testing::Test {
+
+};
+
+using CSMatrixTypes = ::testing::Types<SparseMatrix::CSRMatrix, SparseMatrix::CSCMatrix>;
+TYPED_TEST_SUITE(CSMatrixCtorTest, CSMatrixTypes);
+
+TYPED_TEST(CSMatrixCtorTest, ConstrcutFromEmptyTriplet) {
 	const int numRows = 4;
 	const int numCols = 5;
 	SparseMatrix::TripletMatrix triplet(numRows, numCols);
@@ -107,7 +116,7 @@ TEST(CSRMatrixTest, ConstrcutFromEmptyTriplet) {
 	EXPECT_EQ(m.getNonZeroCount(), triplet.getNonZeroCount());
 }
 
-TEST(CSRMatrixTest, ConstructFromTriplet) {
+TYPED_TEST(CSMatrixCtorTest, ConstructFromTriplet) {
 	const int numRows = 10;
 	const int numCols = 12;
 	const int numElements = 2;
@@ -124,6 +133,127 @@ TEST(CSRMatrixTest, ConstructFromTriplet) {
 	EXPECT_EQ(csr.getDenseColCount(), triplet.getDenseColCount());
 	EXPECT_EQ(csr.getNonZeroCount(), triplet.getNonZeroCount());
 }
+
+template<typename CSMatrix_t>
+using CSMatrixToLinearRowMajor = CSMatrixCtorTest<CSMatrix_t>;
+
+TYPED_TEST_SUITE(CSMatrixToLinearRowMajor, CSMatrixTypes);
+
+TYPED_TEST(CSMatrixToLinearRowMajor, ToLinearDenseRowMajor) {
+	const int numRows = 4;
+	const int numCols = 4;
+	const int numElements = 10;
+	SparseMatrix::TripletMatrix triplet(numRows, numCols, numElements);
+	const int denseSize = numRows * numCols;
+	const float denseRef[denseSize] = {
+		4.5f, 0.0f, 3.2f, 0.0f,
+		3.1f, 2.9f, 0.0f, 0.9f,
+		0.0f, 1.7f, 3.0f, 0.0f,
+		3.5f, 0.4f, 0.0f, 1.0f
+	};
+	triplet.addEntry(0, 0, 4.5f);
+	triplet.addEntry(0, 2, 3.2f);
+	triplet.addEntry(1, 0, 3.1f);
+	triplet.addEntry(1, 1, 2.9f);
+	triplet.addEntry(1, 3, 0.9f);
+	triplet.addEntry(2, 1, 1.7f);
+	triplet.addEntry(2, 2, 3.0f);
+	triplet.addEntry(3, 0, 3.5f);
+	triplet.addEntry(3, 1, 0.4f);
+	triplet.addEntry(3, 3, 1.0f);
+
+	SparseMatrix::CSRMatrix csr(triplet);
+	EXPECT_TRUE(triplet.getNonZeroCount(), csr.getNonZeroCount());
+
+	float dense[denseSize] = {};
+	SparseMatrix::toLinearDenseRowMajor(csr, dense);
+	for (int i = 0; i < denseSize; ++i) {
+		EXPECT_EQ(dense[i], denseRef[i]);
+	}
+}
+
+template <typename CSMatrix_t>
+class CSMatrixRMultAdd : public testing::Test {
+protected:
+	static const int numRows = 4;
+	static const int numCols = 4;
+	static const int numElements = 10;
+	SparseMatrix::TripletMatrix triplet;
+
+	CSMatrixRMultAdd() : triplet(numRows, numCols, numElements)
+	{
+		triplet.addEntry(0, 0, 4.5f);
+		triplet.addEntry(0, 2, 3.2f);
+		triplet.addEntry(1, 0, 3.1f);
+		triplet.addEntry(1, 1, 2.9f);
+		triplet.addEntry(1, 3, 0.9f);
+		triplet.addEntry(2, 1, 1.7f);
+		triplet.addEntry(2, 2, 3.0f);
+		triplet.addEntry(3, 0, 3.5f);
+		triplet.addEntry(3, 1, 0.4f);
+		triplet.addEntry(3, 3, 1.0f);
+		m.init(triplet);
+	}
+	
+	SparseMatrix::CSRMatrix m;
+};
+
+TYPED_TEST_SUITE(CSMatrixRMultAdd, CSMatrixTypes);
+TYPED_TEST(CSMatrixRMultAdd, EmptyMatrix) {
+	float mult[numRows] = { 1,2,3,4 };
+	float add[numRows] = { 5,6,7,8 };
+	const float resRef[numRows] = { 5,6,7,8 };
+	SparseMatrix::TripletMatrix emptyTriplet(4, 4, 10);
+	TypeParam emptyMatrix(emptyTriplet);
+	emptyMatrix.rMultAdd(mult, add);
+	for (int i = 0; i < numRows; ++i) {
+		EXPECT_NEAR(resRef[i], add[i], 1e-6);
+	}
+}
+
+TYPED_TEST(CSMatrixRMultAdd, AddMultZero) {
+	float mult[numRows] = {};
+	float add[numRows] = {};
+	const float resRef[numRows] = {};
+	m.rMultAdd(mult, add);
+	for (int i = 0; i < numRows; ++i) {
+		EXPECT_NEAR(resRef[i], add[i], 1e-6);
+	}
+}
+
+TYPED_TEST(CSMatrixRMultAdd, AddZero) {
+	float mult[numRows] = { 1,2,3,4 };
+	float add[numRows] = {};
+	const float resRef[numRows] = { 14.1, 12.5, 12.4, 8.3 };
+	m.rMultAdd(mult, add);
+	for (int i = 0; i < numRows; ++i) {
+		EXPECT_NEAR(resRef[i], add[i], 1e-6);
+	}
+}
+
+TYPED_TEST(CSMatrixRMultAdd, MultZero) {
+	float mult[numRows] = {};
+	float add[numRows] = { 5,6,7,8 };
+	const float resRef[numRows] = { 5,6,7,8 };
+	m.rMultAdd(mult, add);
+	for (int i = 0; i < numRows; ++i) {
+		EXPECT_NEAR(resRef[i], add[i], 1e-6);
+	}
+}
+
+TYPED_TEST(CSMatrixRMultAdd, Basic) {
+	float mult[numRows] = { 1,0,3,4 };
+	float add[numRows] = { 5,6,7,8 };
+	const float resRef[numRows] = { 19.1, 12.7, 16., 15.5 };
+	m.rMultAdd(mult, add);
+	for (int i = 0; i < numRows; ++i) {
+		EXPECT_NEAR(resRef[i], add[i], 1e-6);
+	}
+}
+
+// ==========================================================================
+// ===================== COMPRESSED SPARSE ROW MATRIX  ======================
+// ==========================================================================
 
 TEST(CSRMatrixTest, CSRMatrixEmptyConstForwardIterator) {
 	SparseMatrix::TripletMatrix triplet(10, 10);
@@ -168,167 +298,9 @@ TEST(CSRMatrixTest, CSRMatrixConstForwardIterator) {
 	EXPECT_TRUE(it == csr.end());
 }
 
-TEST(CSRMatrixTest, ToLinearDenseRowMajor) {
-	const int numRows = 4;
-	const int numCols = 4;
-	const int numElements = 10;
-	SparseMatrix::TripletMatrix triplet(numRows, numCols, numElements);
-	const int denseSize = numRows * numCols;
-	const float denseRef[denseSize] = {
-		4.5f, 0.0f, 3.2f, 0.0f,
-		3.1f, 2.9f, 0.0f, 0.9f,
-		0.0f, 1.7f, 3.0f, 0.0f,
-		3.5f, 0.4f, 0.0f, 1.0f
-	};
-	triplet.addEntry(0, 0, 4.5f);
-	triplet.addEntry(0, 2, 3.2f);
-	triplet.addEntry(1, 0, 3.1f);
-	triplet.addEntry(1, 1, 2.9f);
-	triplet.addEntry(1, 3, 0.9f);
-	triplet.addEntry(2, 1, 1.7f);
-	triplet.addEntry(2, 2, 3.0f);
-	triplet.addEntry(3, 0, 3.5f);
-	triplet.addEntry(3, 1, 0.4f);
-	triplet.addEntry(3, 3, 1.0f);
-
-	SparseMatrix::CSRMatrix csr(triplet);
-	EXPECT_TRUE(triplet.getNonZeroCount(), csr.getNonZeroCount());
-
-	float dense[denseSize] = {};
-	SparseMatrix::toLinearDenseRowMajor(csr, dense);
-	for (int i = 0; i < denseSize; ++i) {
-		EXPECT_EQ(dense[i], denseRef[i]);
-	}
-}
-
-TEST(CSRMatrixTest, rMultAddEmptyMatrix) {
-	const int numRows = 4;
-	const int numCols = 4;
-	const int numElements = 10;
-
-	SparseMatrix::TripletMatrix triplet(numRows, numCols, numElements);
-	SparseMatrix::CSRMatrix csr(triplet);
-	float mult[numRows] = {1,2,3,4};
-	float add[numRows] = {5,6,7,8};
-	const float resRef[numRows] = {5,6,7,8};
-	csr.rMultAdd(mult, add);
-	for (int i = 0; i < numRows; ++i) {
-		EXPECT_NEAR(resRef[i], add[i], 1e-6);
-	}
-}
-
-TEST(CSRMatrixTest, rMultAddAllZero) {
-	const int numRows = 4;
-	const int numCols = 4;
-	const int numElements = 10;
-
-	SparseMatrix::TripletMatrix triplet(numRows, numCols, numElements);
-	triplet.addEntry(0, 0, 4.5f);
-	triplet.addEntry(0, 2, 3.2f);
-	triplet.addEntry(1, 0, 3.1f);
-	triplet.addEntry(1, 1, 2.9f);
-	triplet.addEntry(1, 3, 0.9f);
-	triplet.addEntry(2, 1, 1.7f);
-	triplet.addEntry(2, 2, 3.0f);
-	triplet.addEntry(3, 0, 3.5f);
-	triplet.addEntry(3, 1, 0.4f);
-	triplet.addEntry(3, 3, 1.0f);
-
-	SparseMatrix::CSRMatrix csr(triplet);
-	float mult[numRows] = {};
-	float add[numRows] = {};
-	const float resRef[numRows] = {};
-	csr.rMultAdd(mult, add);
-	for (int i = 0; i < numRows; ++i) {
-		EXPECT_NEAR(resRef[i], add[i], 1e-6);
-	}
-}
-
-TEST(CSRMatrixTest, rMultAddAddZero) {
-	const int numRows = 4;
-	const int numCols = 4;
-	const int numElements = 10;
-
-	SparseMatrix::TripletMatrix triplet(numRows, numCols, numElements);
-	triplet.addEntry(0, 0, 4.5f);
-	triplet.addEntry(0, 2, 3.2f);
-	triplet.addEntry(1, 0, 3.1f);
-	triplet.addEntry(1, 1, 2.9f);
-	triplet.addEntry(1, 3, 0.9f);
-	triplet.addEntry(2, 1, 1.7f);
-	triplet.addEntry(2, 2, 3.0f);
-	triplet.addEntry(3, 0, 3.5f);
-	triplet.addEntry(3, 1, 0.4f);
-	triplet.addEntry(3, 3, 1.0f);
-
-	SparseMatrix::CSRMatrix csr(triplet);
-	float mult[numRows] = { 1,2,3,4 };
-	float add[numRows] = {};
-	const float resRef[numRows] = { 14.1, 12.5, 12.4, 8.3 };
-	csr.rMultAdd(mult, add);
-	for (int i = 0; i < numRows; ++i) {
-		EXPECT_NEAR(resRef[i], add[i], 1e-6);
-	}
-}
-
-TEST(CSRMatrixTest, rMultAddMultZero) {
-	const int numRows = 4;
-	const int numCols = 4;
-	const int numElements = 10;
-
-	SparseMatrix::TripletMatrix triplet(numRows, numCols, numElements);
-	triplet.addEntry(0, 0, 4.5f);
-	triplet.addEntry(0, 2, 3.2f);
-	triplet.addEntry(1, 0, 3.1f);
-	triplet.addEntry(1, 1, 2.9f);
-	triplet.addEntry(1, 3, 0.9f);
-	triplet.addEntry(2, 1, 1.7f);
-	triplet.addEntry(2, 2, 3.0f);
-	triplet.addEntry(3, 0, 3.5f);
-	triplet.addEntry(3, 1, 0.4f);
-	triplet.addEntry(3, 3, 1.0f);
-
-	SparseMatrix::CSRMatrix csr(triplet);
-	float mult[numRows] = {};
-	float add[numRows] = {5,6,7,8};
-	const float resRef[numRows] = { 5,6,7,8 };
-	csr.rMultAdd(mult, add);
-	for (int i = 0; i < numRows; ++i) {
-		EXPECT_NEAR(resRef[i], add[i], 1e-6);
-	}
-}
-
 // ==========================================================================
-// ===================== Compressed Sparse Column Matrix ====================
+// ===================== COMPRESSED SPARSE ROW MATRIX  ======================
 // ==========================================================================
-
-TEST(CSCMatrixTest, ConstrcutFromEmptyTriplet) {
-	const int numRows = 4;
-	const int numCols = 5;
-	SparseMatrix::TripletMatrix triplet(numRows, numCols);
-	SparseMatrix::CSCMatrix m(triplet);
-	EXPECT_EQ(m.getDenseRowCount(), triplet.getDenseRowCount());
-	EXPECT_EQ(m.getDenseColCount(), triplet.getDenseColCount());
-	EXPECT_EQ(m.getNonZeroCount(), triplet.getNonZeroCount());
-}
-
-TEST(CSCMatrixTest, ConstructFromTriplet) {
-	const int numRows = 10;
-	const int numCols = 12;
-	const int numElements = 2;
-	SparseMatrix::TripletMatrix triplet(numRows, numCols, numElements);
-	EXPECT_EQ(triplet.getNonZeroCount(), 0);
-
-	triplet.addEntry(1, 1, 1.0f);
-	triplet.addEntry(2, 2, 1.0f);
-	triplet.addEntry(1, 1, 5.0f);
-	triplet.addEntry(5, 3, 10.0f);
-
-	SparseMatrix::CSCMatrix csc(triplet);
-	EXPECT_EQ(csc.getDenseRowCount(), triplet.getDenseRowCount());
-	EXPECT_EQ(csc.getDenseColCount(), triplet.getDenseColCount());
-	EXPECT_EQ(csc.getNonZeroCount(), triplet.getNonZeroCount());
-}
 
 TEST(CSCMatrixTest, CSCMatrixEmptyConstForwardIterator) {
 	SparseMatrix::TripletMatrix triplet(10, 10);
@@ -371,37 +343,4 @@ TEST(CSCMatrixTest, CSCMatrixConstForwardIterator) {
 
 	++it;
 	EXPECT_TRUE(it == csc.end());
-}
-
-TEST(CSCMatrixTest, ToLinearDenseRowMajor) {
-	const int numRows = 4;
-	const int numCols = 4;
-	const int numElements = 10;
-	SparseMatrix::TripletMatrix triplet(numRows, numCols, numElements);
-	const int denseSize = numRows * numCols;
-	const float denseRef[denseSize] = {
-		4.5f, 0.0f, 3.2f, 0.0f,
-		3.1f, 2.9f, 0.0f, 0.9f,
-		0.0f, 1.7f, 3.0f, 0.0f,
-		3.5f, 0.4f, 0.0f, 1.0f
-	};
-	triplet.addEntry(0, 0, 4.5f);
-	triplet.addEntry(0, 2, 3.2f);
-	triplet.addEntry(1, 0, 3.1f);
-	triplet.addEntry(1, 1, 2.9f);
-	triplet.addEntry(1, 3, 0.9f);
-	triplet.addEntry(2, 1, 1.7f);
-	triplet.addEntry(2, 2, 3.0f);
-	triplet.addEntry(3, 0, 3.5f);
-	triplet.addEntry(3, 1, 0.4f);
-	triplet.addEntry(3, 3, 1.0f);
-
-	SparseMatrix::CSCMatrix csc(triplet);
-	EXPECT_TRUE(triplet.getNonZeroCount(), csc.getNonZeroCount());
-
-	float dense[denseSize] = {};
-	SparseMatrix::toLinearDenseRowMajor(csc, dense);
-	for (int i = 0; i < denseSize; ++i) {
-		EXPECT_EQ(dense[i], denseRef[i]);
-	}
 }
