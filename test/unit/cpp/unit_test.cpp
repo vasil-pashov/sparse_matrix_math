@@ -201,6 +201,103 @@ TEST(CSRMatrixTest, ToLinearDenseRowMajor) {
 	}
 }
 
+TEST(CSRMatrixTest, rMultAddEmptyMatrix) {
+	const int numRows = 4;
+	const int numCols = 4;
+	const int numElements = 10;
+
+	SparseMatrix::TripletMatrix triplet(numRows, numCols, numElements);
+	SparseMatrix::CSRMatrix csr(triplet);
+	float mult[numRows] = {1,2,3,4};
+	float add[numRows] = {5,6,7,8};
+	const float resRef[numRows] = {5,6,7,8};
+	csr.rMultAdd(mult, add);
+	for (int i = 0; i < numRows; ++i) {
+		EXPECT_NEAR(resRef[i], add[i], 1e-6);
+	}
+}
+
+TEST(CSRMatrixTest, rMultAddAllZero) {
+	const int numRows = 4;
+	const int numCols = 4;
+	const int numElements = 10;
+
+	SparseMatrix::TripletMatrix triplet(numRows, numCols, numElements);
+	triplet.addEntry(0, 0, 4.5f);
+	triplet.addEntry(0, 2, 3.2f);
+	triplet.addEntry(1, 0, 3.1f);
+	triplet.addEntry(1, 1, 2.9f);
+	triplet.addEntry(1, 3, 0.9f);
+	triplet.addEntry(2, 1, 1.7f);
+	triplet.addEntry(2, 2, 3.0f);
+	triplet.addEntry(3, 0, 3.5f);
+	triplet.addEntry(3, 1, 0.4f);
+	triplet.addEntry(3, 3, 1.0f);
+
+	SparseMatrix::CSRMatrix csr(triplet);
+	float mult[numRows] = {};
+	float add[numRows] = {};
+	const float resRef[numRows] = {};
+	csr.rMultAdd(mult, add);
+	for (int i = 0; i < numRows; ++i) {
+		EXPECT_NEAR(resRef[i], add[i], 1e-6);
+	}
+}
+
+TEST(CSRMatrixTest, rMultAddAddZero) {
+	const int numRows = 4;
+	const int numCols = 4;
+	const int numElements = 10;
+
+	SparseMatrix::TripletMatrix triplet(numRows, numCols, numElements);
+	triplet.addEntry(0, 0, 4.5f);
+	triplet.addEntry(0, 2, 3.2f);
+	triplet.addEntry(1, 0, 3.1f);
+	triplet.addEntry(1, 1, 2.9f);
+	triplet.addEntry(1, 3, 0.9f);
+	triplet.addEntry(2, 1, 1.7f);
+	triplet.addEntry(2, 2, 3.0f);
+	triplet.addEntry(3, 0, 3.5f);
+	triplet.addEntry(3, 1, 0.4f);
+	triplet.addEntry(3, 3, 1.0f);
+
+	SparseMatrix::CSRMatrix csr(triplet);
+	float mult[numRows] = { 1,2,3,4 };
+	float add[numRows] = {};
+	const float resRef[numRows] = { 14.1, 12.5, 12.4, 8.3 };
+	csr.rMultAdd(mult, add);
+	for (int i = 0; i < numRows; ++i) {
+		EXPECT_NEAR(resRef[i], add[i], 1e-6);
+	}
+}
+
+TEST(CSRMatrixTest, rMultAddMultZero) {
+	const int numRows = 4;
+	const int numCols = 4;
+	const int numElements = 10;
+
+	SparseMatrix::TripletMatrix triplet(numRows, numCols, numElements);
+	triplet.addEntry(0, 0, 4.5f);
+	triplet.addEntry(0, 2, 3.2f);
+	triplet.addEntry(1, 0, 3.1f);
+	triplet.addEntry(1, 1, 2.9f);
+	triplet.addEntry(1, 3, 0.9f);
+	triplet.addEntry(2, 1, 1.7f);
+	triplet.addEntry(2, 2, 3.0f);
+	triplet.addEntry(3, 0, 3.5f);
+	triplet.addEntry(3, 1, 0.4f);
+	triplet.addEntry(3, 3, 1.0f);
+
+	SparseMatrix::CSRMatrix csr(triplet);
+	float mult[numRows] = {};
+	float add[numRows] = {5,6,7,8};
+	const float resRef[numRows] = { 5,6,7,8 };
+	csr.rMultAdd(mult, add);
+	for (int i = 0; i < numRows; ++i) {
+		EXPECT_NEAR(resRef[i], add[i], 1e-6);
+	}
+}
+
 // ==========================================================================
 // ===================== Compressed Sparse Column Matrix ====================
 // ==========================================================================

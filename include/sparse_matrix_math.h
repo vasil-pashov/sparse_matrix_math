@@ -435,6 +435,8 @@ namespace SparseMatrix {
 				count[startIdx]--;
 			}
 		}
+
+		const int getNextStartIndex(int currentStartIndex, int startLength) const noexcept;
 	};
 
 	CSMatrix::CSMatrix(
@@ -472,6 +474,13 @@ namespace SparseMatrix {
 		start.reset();
 	}
 
+	inline const int CSMatrix::getNextStartIndex(int currentStartIndex, int startLength) const noexcept {
+		do {
+			currentStartIndex++;
+		} while (currentStartIndex < startLength && start[currentStartIndex] == start[currentStartIndex + 1]);
+		return currentStartIndex;
+	}
+
 	class CSRMatrix : public CSMatrix {
 	public:
 		using ConstIterator = CSConstIterator<CSRElement>;
@@ -488,6 +497,11 @@ namespace SparseMatrix {
 		/// @brief Iterator denoting the end of the matrix. Dereferencing it is undefined behavior.
 		/// @return Iterator denoting the end of the matrix.
 		ConstIterator end() const noexcept;
+		/// @brief Multiply the matrix with the first argument being on the right hand side of the matrix and add the result to the second argument
+		/// The operation overrides the second argument
+		/// @param[in] mult Vector which will multiply the matrix (the vector being on the rhs of the matrix)
+		/// @param[in,out] add Vector which will be added to the result of the multiplication.
+		void rMultAdd(const float* const mult, float* const add) const noexcept;
 	};
 
 	CSRMatrix::CSRMatrix(const TripletMatrix& triplet) noexcept:
@@ -506,6 +520,19 @@ namespace SparseMatrix {
 
 	inline const int CSRMatrix::getNonZeroCount() const noexcept {
 		return start[denseRowCount];
+	}
+
+	void CSRMatrix::rMultAdd(const float* const mult, float* const add) const noexcept {
+		const int n = getDenseRowCount();
+		for (int row = firstActiveStart; row < n; row = getNextStartIndex(row, n)) {
+			float res = 0.0f;
+			for (int colIdx = start[row]; colIdx < start[row + 1]; ++colIdx) {
+				const int col = positions[colIdx];
+				const float value = values[colIdx];
+				res = std::fmaf(value, mult[col], res);
+			}
+			add[row] += res;
+		}
 	}
 
 	class CSCMatrix : public CSMatrix {
