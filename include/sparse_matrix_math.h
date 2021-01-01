@@ -5,6 +5,7 @@
 #include <cassert>
 #include <utility>
 #include <cinttypes>
+#include <cmath>
 
 namespace SparseMatrix {
 	/// @brief Class to hold sparse matrix into triplet (coordinate) format.
@@ -655,11 +656,130 @@ namespace SparseMatrix {
 	/// @param[in] compressed Matrix in Compressed Sparse Row format
 	/// @param[out] out Preallocated (and filled with zero) space where the dense matrix will be added
 	template<typename CompressedMatrixFormat>
-	static void toLinearDenseRowMajor(const CompressedMatrixFormat& compressed, float* out) noexcept {
+	inline void toLinearDenseRowMajor(const CompressedMatrixFormat& compressed, float* out) noexcept {
 		const int64_t colCount = compressed.getDenseColCount();
 		for (const auto& el : compressed) {
 			const int64_t index = el.getRow() * colCount + el.getCol();
 			out[index] = el.getValue();
 		}
+	}
+
+	class Vector {
+	public:
+		Vector() noexcept :
+			size(0),
+			data(nullptr)
+		{ }
+
+		Vector(const int size) noexcept :
+			size(size),
+			data(static_cast<float*>(malloc(size * sizeof(float))))
+		{ }
+
+		Vector(const int size, const float val) noexcept :
+			size(size)
+		{
+			initDataWithVal(val);
+		}
+
+		Vector(Vector&& other) noexcept :
+			size(other.size) {
+			free(data);
+			data = other.data;
+			other.data = nullptr;
+			other.size = 0;
+		}
+
+		Vector& operator=(Vector&& other) noexcept {
+			size = other.size;
+			free(data);
+			data = other.data;
+			other.data = nullptr;
+			other.size = 0;
+			return *this;
+		}
+
+		Vector(const Vector&) = delete;
+		Vector& operator=(const Vector&) = delete;
+
+		~Vector() {
+			free(data);
+			data = nullptr;
+			size = 0;
+		}
+
+		void init(const int size) {
+			assert(this->size == 0 && data == nullptr);
+			this->size = size;
+			data = static_cast<float*>(malloc(size * sizeof(float)));
+		}
+
+		void init(const int size, const float val) {
+			assert(this->size == 0 && data == nullptr);
+			this->size = size;
+			initDataWithVal(val);
+		}
+
+		const int getSize() const {
+			return this->size;
+		}
+
+		operator float* const() {
+			return data;
+		}
+
+		const float operator[](const int index) const {
+			assert(index < size);
+			return data[index];
+		}
+
+		float& operator[](const int index) {
+			assert(index < size);
+			return data[index];
+		}
+
+		Vector& operator+=(const Vector& other) {
+			assert(other.size == size);
+			for (int i = 0; i < size; ++i) {
+				data[i] += other[i];
+			}
+			return *this;
+		}
+
+		Vector& operator-=(const Vector& other) {
+			assert(other.size == size);
+			for (int i = 0; i < size; ++i) {
+				data[i] -= other[i];
+			}
+			return *this;
+		}
+
+		const float secondNorm() const {
+			float sum = 0.0f;
+			for (int i = 0; i < size; ++i) {
+				sum += data[i] * data[i];
+			}
+			return std::sqrt(sum);
+		}
+	private:
+		void initDataWithVal(const float val) {
+			if (val == 0.0f) {
+				data = static_cast<float*>(calloc(size, sizeof(float)));
+			} else {
+				const int64_t byteSize = int64_t(size) * sizeof(float);
+				data = static_cast<float*>(malloc(byteSize));
+				if (!data) return;
+				for (int i = 0; i < this->size; ++i) {
+					data[i] = val;
+				}
+			}
+		}
+		float* data;
+		int size;
+	};
+
+	template<typename CompressedMatrixFormat>
+	inline int BiCG(const CompressedMatrixFormat& a, const CompressedMatrixFormat& aT, const Vector& b1, const Vector& b2) {
+		
 	}
 }
