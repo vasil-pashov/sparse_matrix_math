@@ -103,14 +103,14 @@ class CSMatrixCtorTest : public testing::Test {
 
 };
 
-using CSMatrixTypes = ::testing::Types<SparseMatrix::CSRMatrix, SparseMatrix::CSCMatrix>;
+using CSMatrixTypes = ::testing::Types<SparseMatrix::CSRMatrix>;
 TYPED_TEST_SUITE(CSMatrixCtorTest, CSMatrixTypes);
 
 TYPED_TEST(CSMatrixCtorTest, ConstrcutFromEmptyTriplet) {
 	const int numRows = 4;
 	const int numCols = 5;
 	SparseMatrix::TripletMatrix triplet(numRows, numCols);
-	SparseMatrix::CSRMatrix m(triplet);
+	TypeParam m(triplet);
 	EXPECT_EQ(m.getDenseRowCount(), triplet.getDenseRowCount());
 	EXPECT_EQ(m.getDenseColCount(), triplet.getDenseColCount());
 	EXPECT_EQ(m.getNonZeroCount(), triplet.getNonZeroCount());
@@ -163,7 +163,7 @@ TYPED_TEST(CSMatrixToLinearRowMajor, ToLinearDenseRowMajor) {
 	triplet.addEntry(3, 3, 1.0f);
 
 	SparseMatrix::CSRMatrix csr(triplet);
-	EXPECT_TRUE(triplet.getNonZeroCount(), csr.getNonZeroCount());
+	EXPECT_EQ(triplet.getNonZeroCount(), csr.getNonZeroCount());
 
 	float dense[denseSize] = {};
 	SparseMatrix::toLinearDenseRowMajor(csr, dense);
@@ -296,51 +296,4 @@ TEST(CSRMatrixTest, CSRMatrixConstForwardIterator) {
 
 	++it;
 	EXPECT_TRUE(it == csr.end());
-}
-
-// ==========================================================================
-// ===================== COMPRESSED SPARSE ROW MATRIX  ======================
-// ==========================================================================
-
-TEST(CSCMatrixTest, CSCMatrixEmptyConstForwardIterator) {
-	SparseMatrix::TripletMatrix triplet(10, 10);
-	SparseMatrix::CSCMatrix csc(triplet);
-	EXPECT_TRUE(csc.begin() == csc.end());
-}
-
-TEST(CSCMatrixTest, CSCMatrixConstForwardIterator) {
-	const int numRows = 6;
-	const int numCols = 6;
-	float denseRef[numRows][numCols] = {};
-	denseRef[1][1] = 1.1f;
-	denseRef[2][1] = 2.2f;
-	denseRef[3][1] = 3.3f;
-	denseRef[4][4] = 4.4f;
-
-	SparseMatrix::TripletMatrix triplet(numRows, numCols);
-	triplet.addEntry(4, 4, 4.4f);
-	triplet.addEntry(1, 1, 1.1f);
-	triplet.addEntry(2, 1, 2.2f);
-	triplet.addEntry(3, 1, 3.3f);
-
-	SparseMatrix::CSCMatrix csc(triplet);
-	SparseMatrix::CSCMatrix::ConstIterator it = csc.begin();
-
-	EXPECT_EQ(it->getCol(), 1);
-	EXPECT_EQ(it->getValue(), denseRef[it->getRow()][it->getCol()]);
-
-	++it;
-	EXPECT_EQ(it->getCol(), 1);
-	EXPECT_EQ(it->getValue(), denseRef[it->getRow()][it->getCol()]);
-
-	++it;
-	EXPECT_EQ(it->getCol(), 1);
-	EXPECT_EQ(it->getValue(), denseRef[it->getRow()][it->getCol()]);
-
-	++it;
-	EXPECT_EQ(it->getCol(), 4);
-	EXPECT_EQ(it->getValue(), denseRef[it->getRow()][it->getCol()]);
-
-	++it;
-	EXPECT_TRUE(it == csc.end());
 }

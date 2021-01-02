@@ -145,12 +145,15 @@ namespace SparseMatrix {
 		CSC ///< (C)ompressed (S)parse (C)olumn
 	};
 
-	class CSElement {
+	class CSRElement {
 	public:
 		const float getValue() const noexcept;
-		friend void swap(CSElement& a, CSElement& b) noexcept;
+		const int getRow() const noexcept;
+		const int getCol() const noexcept;
+		friend void swap(CSRElement& a, CSRElement& b) noexcept;
+		friend class CSRConstIterator;
 	protected:
-		CSElement(
+		CSRElement(
 			const float* values,
 			const int* positions,
 			const int* start,
@@ -158,9 +161,9 @@ namespace SparseMatrix {
 			const int currentPositionIndex
 		) noexcept;
 
-		CSElement(const CSElement&) = default;
-		CSElement& operator=(const CSElement&) = default;
-		const bool operator==(const CSElement&) const;
+		CSRElement(const CSRElement&) = default;
+		CSRElement& operator=(const CSRElement&) = default;
+		const bool operator==(const CSRElement&) const;
 
 		/// Non owning pointer to the list of non zero elements of the matrix
 		const float* values;
@@ -176,7 +179,7 @@ namespace SparseMatrix {
 		int currentPositionIndex;
 	};
 
-	CSElement::CSElement(
+	CSRElement::CSRElement(
 		const float* values,
 		const int* positions,
 		const int* start,
@@ -190,11 +193,18 @@ namespace SparseMatrix {
 		currentPositionIndex(currentPositionIndex) {
 	}
 
-	const float CSElement::getValue() const noexcept {
+	const float CSRElement::getValue() const noexcept {
 		return values[currentPositionIndex];
 	}
 
-	void swap(CSElement& a, CSElement& b) noexcept {
+	const int CSRElement::getRow() const noexcept {
+		return currentStartIndex;
+	}
+	const int CSRElement::getCol() const noexcept {
+		return positions[currentPositionIndex];
+	}
+
+	void swap(CSRElement& a, CSRElement& b) noexcept {
 		using std::swap;
 		swap(a.values, b.values);
 		swap(a.positions, b.positions);
@@ -203,7 +213,7 @@ namespace SparseMatrix {
 		swap(a.currentPositionIndex, b.currentPositionIndex);
 	}
 
-	const bool CSElement::operator==(const CSElement& other) const {
+	const bool CSRElement::operator==(const CSRElement& other) const {
 		return other.values == values &&
 			other.positions == positions &&
 			other.start == start &&
@@ -212,37 +222,35 @@ namespace SparseMatrix {
 	}
 
 	/// @brief Base class for const forward iterator for matrix in compressed sparse row format
-	template<typename CSElement>
-	class CSConstIterator {
+	class CSRConstIterator {
 	public:
 		using iterator_category = std::forward_iterator_tag;
-		using value_type = CSElement;
-		using pointer = const CSElement*;
-		using reference = const CSElement&;
+		using value_type = CSRElement;
+		using pointer = const CSRElement*;
+		using reference = const CSRElement&;
 
-		CSConstIterator() = default;
-		CSConstIterator(
+		CSRConstIterator() = default;
+		CSRConstIterator(
 			const float* values,
 			const int* positions,
 			const int* start,
 			const int currentStartIndex,
 			const int currentPositionIndex
 		) noexcept;
-		CSConstIterator(const CSConstIterator&) = default;
-		CSConstIterator& operator=(const CSConstIterator&) = default;
-		const bool operator==(const CSConstIterator& other) const noexcept;
-		const bool operator!=(const CSConstIterator& other) const noexcept;
+		CSRConstIterator(const CSRConstIterator&) = default;
+		CSRConstIterator& operator=(const CSRConstIterator&) = default;
+		const bool operator==(const CSRConstIterator& other) const noexcept;
+		const bool operator!=(const CSRConstIterator& other) const noexcept;
 		reference operator*() const;
 		pointer operator->() const;
-		CSConstIterator& operator++() noexcept;
-		CSConstIterator operator++(int) noexcept;
-		friend void swap(CSConstIterator& a, CSConstIterator& b) noexcept;
+		CSRConstIterator& operator++() noexcept;
+		CSRConstIterator operator++(int) noexcept;
+		friend void swap(CSRConstIterator& a, CSRConstIterator& b) noexcept;
 	private:
-		CSElement currentElement;
+		CSRElement currentElement;
 	};
 
-	template<typename CSElement>
-	CSConstIterator<CSElement>::CSConstIterator(
+	CSRConstIterator::CSRConstIterator(
 		const float* values,
 		const int* positions,
 		const int* start,
@@ -252,28 +260,23 @@ namespace SparseMatrix {
 		currentElement(values, positions, start, currentStartIndex, currentPositionIndex)
 	{ }
 
-	template<typename CSElement>
-	inline typename CSConstIterator<CSElement>::reference CSConstIterator<CSElement>::operator*() const {
+	inline typename CSRConstIterator::reference CSRConstIterator::operator*() const {
 		return currentElement;
 	}
 
-	template<typename CSElement>
-	inline typename CSConstIterator<CSElement>::pointer CSConstIterator<CSElement>::operator->() const {
+	inline typename CSRConstIterator::pointer CSRConstIterator::operator->() const {
 		return &currentElement;
 	}
 
-	template<typename CSElement>
-	inline const bool CSConstIterator<CSElement>::operator==(const CSConstIterator& other) const noexcept {
+	inline const bool CSRConstIterator::operator==(const CSRConstIterator& other) const noexcept {
 		return currentElement == other.currentElement;
 	}
 
-	template<typename CSElement>
-	inline const bool CSConstIterator<CSElement>::operator!=(const CSConstIterator& other) const noexcept {
+	inline const bool CSRConstIterator::operator!=(const CSRConstIterator& other) const noexcept {
 		return !(*this == other);
 	}
 
-	template<typename CSElement>
-	CSConstIterator<CSElement>& CSConstIterator<CSElement>::operator++() noexcept {
+	CSRConstIterator& CSRConstIterator::operator++() noexcept {
 		currentElement.currentPositionIndex++;
 		assert(currentElement.currentPositionIndex <= currentElement.start[currentElement.currentStartIndex + 1]);
 		if (currentElement.currentPositionIndex == currentElement.start[currentElement.currentStartIndex + 1]) {
@@ -284,100 +287,45 @@ namespace SparseMatrix {
 		return *this;
 	}
 
-	template<typename CSElement>
-	CSConstIterator<CSElement> CSConstIterator<CSElement>::operator++(int) noexcept {
-		CSConstIterator initialState = *this;
+	CSRConstIterator CSRConstIterator::operator++(int) noexcept {
+		CSRConstIterator initialState = *this;
 		++(*this);
 		return initialState;
 	}
 
-	template<typename CSElement>
-	inline void swap(CSConstIterator<CSElement>& a, CSConstIterator<CSElement>& b) noexcept {
+	inline void swap(CSRConstIterator& a, CSRConstIterator& b) noexcept {
 		swap(a.currentElement, b.currentElement);
 	}
 
-	class CSRElement : public CSElement {
-		friend class CSConstIterator<CSRElement>;
-	public:
-		CSRElement(
-			const float* values,
-			const int* positions,
-			const int* start,
-			const int currentStartIndex,
-			const int currentPositionIndex
-		) noexcept;
-		const int getRow() const noexcept {
-			return currentStartIndex;
-		}
-
-		const int getCol() const noexcept {
-			return positions[currentPositionIndex];
-		}
-	};
-
-	CSRElement::CSRElement(
-		const float* values,
-		const int* positions,
-		const int* start,
-		const int currentStartIndex,
-		const int currentPositionIndex
-	) noexcept :
-		CSElement(values, positions, start, currentStartIndex, currentPositionIndex)
-	{ }
-
-	class CSCElement : public CSElement {
-		friend class CSConstIterator<CSCElement>;
-	public:
-		CSCElement(
-			const float* values,
-			const int* positions,
-			const int* start,
-			const int currentStartIndex,
-			const int currentPositionIndex
-		) noexcept;
-		const int getRow() const noexcept {
-			return positions[currentPositionIndex];
-		}
-
-		const int getCol() const noexcept {
-			return currentStartIndex;
-		}
-	};
-
-	CSCElement::CSCElement(
-		const float* values,
-		const int* positions,
-		const int* start,
-		const int currentStartIndex,
-		const int currentPositionIndex
-	) noexcept :
-		CSElement(values, positions, start, currentStartIndex, currentPositionIndex) 			{
- }
-
 	/// @brief Base class for matrix in compressed sparse row format
 	/// Compressed sparse row format is represented with 3 arrays. One for the values,
-	/// one to keep track nonzero columns/rows for each row/column, one to keep track where each row/column starts
-	class CSMatrix {
+	/// one to keep track nonzero columns for each row, one to keep track where each row
+	class CSRMatrix {
 	public:
-		CSMatrix(const CSMatrix&) = delete;
-		CSMatrix& operator=(const CSMatrix&) = delete;
+		using ConstIterator = CSRConstIterator;
+		CSRMatrix() noexcept;
+		CSRMatrix(const TripletMatrix& triplet) noexcept;
+		CSRMatrix(const CSRMatrix&) = delete;
+		CSRMatrix& operator=(const CSRMatrix&) = delete;
+		CSRMatrix(CSRMatrix&&) noexcept = default;
+		CSRMatrix& operator=(CSRMatrix&&) noexcept = default;
+		~CSRMatrix() = default;
+		const int init(const TripletMatrix& triplet) noexcept;
+		/// @brief Get the number of trivial nonzero entries in the matrix
+		/// Trivial nonzero entries do not include zero elements which came from numerical cancellation
+		/// @return The number of trivial nonzero entries in the matrix
+		const int getNonZeroCount() const noexcept;
 		/// @brief Get the total number of rows of the matrix
 		/// @return The row count which dense matrix is supposed to have (not only the stored ones)
 		const int getDenseRowCount() const noexcept;
 		/// @brief Get the total number of cols of the matrix
 		/// @return The column count which dense matrix is supposed to have (not only the stored ones)
 		const int getDenseColCount() const noexcept;
-	protected:
-		CSMatrix() noexcept;
-		/// May fail due to insufficient memory
-		CSMatrix(
-			const int nonZeroCount,
-			const int startSize,
-			const int denseRowCount,
-			const int denseColumnCount
-		) noexcept;
-		CSMatrix(CSMatrix&&) noexcept = default;
-		CSMatrix& operator=(CSMatrix&&) noexcept = default;
+		ConstIterator begin() const noexcept;
+		ConstIterator end() const noexcept;
+		void rMultAdd(const float* const mult, float* const lhs) const noexcept;
+		void rMultSub(const float* const mult, float* const lhs) const noexcept;
+	private:
 		/// Array which will hold all nonzero entries of the matrix.
 		/// This is of length  number of nonzero entries
 		std::unique_ptr<float[]> values;
@@ -392,261 +340,139 @@ namespace SparseMatrix {
 		/// Index in start array. If format is CSR the first row which has nonzero element in it
 		/// If format is CSC the first column which has nonzero element in it
 		int firstActiveStart;
-		/// @brief Release all allocated memory and set all counts to 0
-		void freeMem() noexcept;
-		const int init(
-			const int nonZeroCount,
-			const int startSize,
-			const int denseRowCount,
-			const int denseColumnCount
-		) noexcept;
-		
-		enum type {
-			CSR,
-			CSC
-		};
-
-		template<type t>
-		void fillArrays(const TripletMatrix& triplet) {
-			const int n = t == CSR ? getDenseRowCount() : getDenseColCount();
-			std::unique_ptr<int[], decltype(&free)> count(static_cast<int*>(calloc(n, sizeof(int))), &free);
-			if (count == nullptr) {
-				assert(false);
-				freeMem();
-			}
-
-			for (const auto& el : triplet) {
-				if (t == CSR) {
-					count[el.getRow()]++;
-				} else {
-					count[el.getCol()]++;
+		const int fillArrays(const TripletMatrix& triplet) noexcept;
+		const int getNextStartIndex(int currentStartIndex, int startLength) const noexcept;
+		template<typename FunctorType>
+		void rMultOp(const float* const mult, float* const lhs, const FunctorType& op) const noexcept {
+			for (int row = firstActiveStart; row < denseRowCount; row = getNextStartIndex(row, denseRowCount)) {
+				float dot = 0.0f;
+				for (int colIdx = start[row]; colIdx < start[row + 1]; ++colIdx) {
+					const int col = positions[colIdx];
+					const float val = values[colIdx];
+					dot = std::fmaf(val, mult[col], dot);
 				}
-			}
-
-			start[0] = 0;
-			for (int i = 0; i < n; ++i) {
-				start[i + 1] = start[i] + count[i];
-				if (firstActiveStart == -1 && start[i + 1] != 0) {
-					firstActiveStart = i;
-				}
-			}
-			if (firstActiveStart == -1) {
-				firstActiveStart = n;
-			}
-
-			for (const auto& el : triplet) {
-				const int startIdx = t == CSR ? el.getRow() : el.getCol();
-				const int currentCount = count[startIdx];;
-				const int position = start[startIdx + 1] - currentCount;
-				positions[position] = t == CSR ? el.getCol() : el.getRow();
-				values[position] = el.getValue();
-				count[startIdx]--;
+				lhs[row] = op(lhs[row], dot);
 			}
 		}
-
-		const int getNextStartIndex(int currentStartIndex, int startLength) const noexcept;
 	};
 
-	CSMatrix::CSMatrix() noexcept :
+	CSRMatrix::CSRMatrix() noexcept :
+		values(nullptr),
+		positions(nullptr),
+		start(nullptr),
 		denseRowCount(0),
 		denseColCount(0),
-		firstActiveStart(0)
+		firstActiveStart(-1)
 	{ }
 
-	CSMatrix::CSMatrix(
-		const int nonZeroCount,
-		const int startSize,
-		const int denseRowCount,
-		const int denseColCount
-	) noexcept :
-		values(new float[nonZeroCount]),
-		positions(new int[nonZeroCount]),
-		start(new int[startSize]),
-		denseRowCount(denseRowCount),
-		denseColCount(denseColCount),
+	CSRMatrix::CSRMatrix(const TripletMatrix& triplet) noexcept :
+		values(new float[triplet.getNonZeroCount()]),
+		positions(new int[triplet.getNonZeroCount()]),
+		start(new int[triplet.getDenseRowCount() + 1]),
+		denseRowCount(triplet.getDenseRowCount()),
+		denseColCount(triplet.getDenseColCount()),
 		firstActiveStart(-1)
 	{
-		if (values == nullptr || positions == nullptr || start == nullptr) {
-			assert(false);
-			freeMem();
-		}
+		fillArrays(triplet);
 	}
 
-	inline const int CSMatrix::getDenseRowCount() const noexcept {
+	const int CSRMatrix::init(const TripletMatrix& triplet) noexcept {
+		denseRowCount = triplet.getDenseRowCount();
+		denseColCount = triplet.getDenseColCount();
+		const int nnz = triplet.getNonZeroCount();
+		values.reset(new float[nnz]);
+		if (!values) {
+			return 1;
+		}
+		positions.reset(new int[nnz]);
+		if (!positions) {
+			return 1;
+		}
+		start.reset(new int[denseRowCount + 1]);
+		if (!start) {
+			return 1;
+		}
+		int err = fillArrays(triplet);
+		if (err) {
+			return err;
+		}
+		return 0;
+	}
+
+	inline const int CSRMatrix::getNonZeroCount() const noexcept {
+		return start[getDenseRowCount()];
+	}
+
+	inline const int CSRMatrix::getDenseRowCount() const noexcept {
 		return denseRowCount;
 	}
 
-	inline const int CSMatrix::getDenseColCount() const noexcept {
+	inline const int CSRMatrix::getDenseColCount() const noexcept {
 		return denseColCount;
 	}
 
-	inline void CSMatrix::freeMem() noexcept {
-		this->denseColCount = 0;
-		this->denseRowCount = 0;
-		values.reset();
-		positions.reset();
-		start.reset();
+	inline CSRMatrix::ConstIterator CSRMatrix::begin() const noexcept {
+		return ConstIterator(values.get(), positions.get(), start.get(), firstActiveStart, 0);
 	}
 
-	inline const int CSMatrix::getNextStartIndex(int currentStartIndex, int startLength) const noexcept {
+	inline CSRMatrix::ConstIterator CSRMatrix::end() const noexcept {
+		return ConstIterator(values.get(), positions.get(), start.get(), denseRowCount, start[denseRowCount]);
+	}
+
+	inline void CSRMatrix::rMultAdd(const float* const mult, float* const lhs) const noexcept {
+		auto addOp = [](const float lhs, const float rhs) ->float {
+			return lhs + rhs;
+		};
+		rMultOp(mult, lhs, addOp);
+	}
+
+
+	inline void CSRMatrix::rMultSub(const float* const mult, float* const lhs) const noexcept {
+		auto addOp = [](const float lhs, const float rhs) ->float {
+			return lhs - rhs;
+		};
+		rMultOp(mult, lhs, addOp);
+	}
+
+	inline const int CSRMatrix::getNextStartIndex(int currentStartIndex, int startLength) const noexcept {
 		do {
 			currentStartIndex++;
 		} while (currentStartIndex < startLength && start[currentStartIndex] == start[currentStartIndex + 1]);
 		return currentStartIndex;
 	}
 
-	const int CSMatrix::init(
-		const int nonZeroCount,
-		const int startSize,
-		const int denseRowCount,
-		const int denseColumnCount
-	) noexcept {
-		values.reset(new float[nonZeroCount]);
-		if (!values) { return 1; }
-
-		positions.reset(new int[nonZeroCount]);
-		if (!values) { return 1; }
-
-		start.reset(new int[startSize]);
-		if (!values) { return 1; }
-
-		this->denseRowCount = denseRowCount;
-		this->denseColCount = denseColCount;
-		this->firstActiveStart = -1;
-		return 0;
-	}
-
-	class CSRMatrix : public CSMatrix {
-	public:
-		using ConstIterator = CSConstIterator<CSRElement>;
-		CSRMatrix() = default;
-		explicit CSRMatrix(const TripletMatrix& triplet) noexcept;
-		int init(const TripletMatrix& triplet) noexcept;
-		/// @brief Get the number of trivial nonzero entries in the matrix
-		/// Trivial nonzero entries do not include zero elements which came from numerical cancellation
-		/// @return The number of trivial nonzero entries in the matrix
-		const int getNonZeroCount() const noexcept;
-		/// Get constant iterator to the first nonzero element of the matrix
-		/// The iterator is guaranteed to iterate over rows in non descending fashion, eventually reaching the end of the matrix
-		/// There are no guarantees for the order of the columns in each row
-		/// @return Iterator to the first nonzero element of the matrix
-		ConstIterator begin() const noexcept;
-		/// @brief Iterator denoting the end of the matrix. Dereferencing it is undefined behavior.
-		/// @return Iterator denoting the end of the matrix.
-		ConstIterator end() const noexcept;
-		/// @brief Multiply the matrix with the first argument being on the right hand side of the matrix and add the result to the second argument
-		/// The operation overrides the second argument
-		/// @param[in] mult Vector which will multiply the matrix (the vector being on the rhs of the matrix)
-		/// @param[in,out] add Vector which will be added to the result of the multiplication.
-		void rMultAdd(const float* const mult, float* const add) const noexcept;
-	};
-
-	CSRMatrix::CSRMatrix(const TripletMatrix& triplet) noexcept:
-		CSMatrix(triplet.getNonZeroCount(), triplet.getDenseRowCount() + 1, triplet.getDenseRowCount(), triplet.getDenseColCount()) 
-	{
-		fillArrays<CSMatrix::CSR>(triplet);
-	}
-
-	int CSRMatrix::init(const TripletMatrix& triplet) noexcept {
-		const int nnz = triplet.getNonZeroCount();
-		const int rows = triplet.getDenseRowCount();
-		const int cols = triplet.getDenseColCount();
-		int err = CSMatrix::init(nnz, rows + 1, rows, cols);
-		if (err) return err;
-		CSMatrix::fillArrays<CSR>(triplet);
-		return 0;
-	}
-
-	CSRMatrix::ConstIterator CSRMatrix::begin() const noexcept {
-		return ConstIterator(values.get(), positions.get(), start.get(), this->firstActiveStart, 0);
-	}
-
-	CSRMatrix::ConstIterator CSRMatrix::end() const noexcept {
-		return ConstIterator(values.get(), positions.get(), start.get(), getDenseRowCount(), getNonZeroCount());
-	}
-
-	inline const int CSRMatrix::getNonZeroCount() const noexcept {
-		return start[denseRowCount];
-	}
-
-	void CSRMatrix::rMultAdd(const float* const mult, float* const add) const noexcept {
+	const int CSRMatrix::fillArrays(const TripletMatrix& triplet) noexcept {
 		const int n = getDenseRowCount();
-		for (int row = firstActiveStart; row < n; row = getNextStartIndex(row, n)) {
-			float res = 0.0f;
-			for (int colIdx = start[row]; colIdx < start[row + 1]; ++colIdx) {
-				const int col = positions[colIdx];
-				const float value = values[colIdx];
-				res = std::fmaf(value, mult[col], res);
-			}
-			add[row] += res;
+		std::unique_ptr<int[], decltype(&free)> count(static_cast<int*>(calloc(n, sizeof(int))), &free);
+		if (count == nullptr) {
+			assert(false);
+			return 1;
 		}
-	}
 
-	class CSCMatrix : public CSMatrix {
-	public:
-		using ConstIterator = CSConstIterator<CSCElement>;
-		CSCMatrix() = default;
-		explicit CSCMatrix(const TripletMatrix& triplet) noexcept;
-		int init(const TripletMatrix& triplet) noexcept;
-		/// @brief Get the number of trivial nonzero entries in the matrix
-		/// Trivial nonzero entries do not include zero elements which came from numerical cancellation
-		/// @return The number of trivial nonzero entries in the matrix
-		const int getNonZeroCount() const noexcept;
-		/// Get constant iterator to the first nonzero element of the matrix
-		/// The iterator is guaranteed to iterate over columns in non descending fashion, eventually reaching the end of the matrix
-		/// There are no guarantees for the order of the rows in each column
-		/// @return Iterator to the first nonzero element of the matrix
-		ConstIterator begin() const noexcept;
-		/// @brief Iterator denoting the end of the matrix. Dereferencing it is undefined behavior.
-		/// @return Iterator denoting the end of the matrix.
-		ConstIterator end() const noexcept;
-		/// @brief Multiply the matrix with the first argument being on the right hand side of the matrix and add the result to the second argument
-		/// The operation overrides the second argument
-		/// @param[in] mult Vector which will multiply the matrix (the vector being on the rhs of the matrix)
-		/// @param[in,out] add Vector which will be added to the result of the multiplication.
-		void rMultAdd(const float* const mult, float* const add) const noexcept;
-	};
+		for (const auto& el : triplet) {
+			count[el.getRow()]++;
+		}
 
-	CSCMatrix::CSCMatrix(const TripletMatrix& triplet) noexcept :
-		CSMatrix(triplet.getNonZeroCount(), triplet.getDenseColCount() + 1, triplet.getDenseRowCount(), triplet.getDenseColCount()) 
-	{
-		fillArrays<CSMatrix::CSC>(triplet);
-	}
+		start[0] = 0;
+		for (int i = 0; i < n; ++i) {
+			start[i + 1] = start[i] + count[i];
+			if (firstActiveStart == -1 && start[i + 1] != 0) {
+				firstActiveStart = i;
+			}
+		}
+		if (firstActiveStart == -1) {
+			firstActiveStart = n;
+		}
 
-	CSCMatrix::ConstIterator CSCMatrix::begin() const noexcept {
-		return ConstIterator(values.get(), positions.get(), start.get(), this->firstActiveStart, 0);
-	}
-
-	CSCMatrix::ConstIterator CSCMatrix::end() const noexcept {
-		return ConstIterator(values.get(), positions.get(), start.get(), getDenseColCount(), getNonZeroCount());
-	}
-
-	inline const int CSCMatrix::getNonZeroCount() const noexcept {
-		return start[getDenseColCount()];
-	}
-
-	int CSCMatrix::init(const TripletMatrix& triplet) noexcept {
-		const int nnz = triplet.getNonZeroCount();
-		const int rows = triplet.getDenseRowCount();
-		const int cols = triplet.getDenseColCount();
-		int err = CSMatrix::init(nnz, rows + 1, rows, cols);
-		if (err) return err;
-		CSMatrix::fillArrays<CSC>(triplet);
+		for (const auto& el : triplet) {
+			const int startIdx = el.getRow();
+			const int currentCount = count[startIdx];;
+			const int position = start[startIdx + 1] - currentCount;
+			positions[position] = el.getCol();
+			values[position] = el.getValue();
+			count[startIdx]--;
+		}
 		return 0;
-	}
-
-	void CSCMatrix::rMultAdd(const float* const mult, float* const add) const noexcept {
-		const int n = getDenseColCount();
-		for (int col = firstActiveStart; col < n; col = getNextStartIndex(col, n)) {
-			if (mult[col] == 0.0f) {
-				continue;
-			}
-			for (int rowIdx = start[col]; rowIdx < start[col + 1]; ++rowIdx) {
-				const int row = positions[rowIdx];
-				const float value = values[rowIdx];
-				add[row] = std::fma(value, mult[col], add[row]);
-			}
-		}
 	}
 
 	/// @brief Function to convert matrix from compressed sparse row format to dense row major matrix
