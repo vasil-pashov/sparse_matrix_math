@@ -516,6 +516,13 @@ namespace SparseMatrix {
 			initDataWithVal(val);
 		}
 
+		Vector(const std::initializer_list<float>& l) :
+			size(l.size()),
+			data(static_cast<float*>(malloc(l.size() * sizeof(float))))
+		{
+			std::copy(l.begin(), l.end(), data);
+		}
+
 		Vector(Vector&& other) noexcept :
 			size(other.size) {
 			free(data);

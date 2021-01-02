@@ -374,12 +374,7 @@ TEST(BiCGSymmetric, SmallDenseMatrix) {
 	}
 
 	SparseMatrix::CSRMatrix csr(triplet);
-	SparseMatrix::Vector b(4);
-	b[0] = 1;
-	b[1] = 2;
-	b[2] = 3;
-	b[3] = 4;
-
+	SparseMatrix::Vector b({1,2,3,4});
 	SparseMatrix::Vector x(4, 0);
 
 	EXPECT_FALSE(SparseMatrix::BiCGSymmetric(csr, b, x));
