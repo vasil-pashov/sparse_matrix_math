@@ -173,14 +173,14 @@ TYPED_TEST(CSMatrixToLinearRowMajor, ToLinearDenseRowMajor) {
 }
 
 template <typename CSMatrix_t>
-class CSMatrixRMultAdd : public testing::Test {
+class CSMatrixRMultOp : public testing::Test {
 protected:
 	static const int numRows = 4;
 	static const int numCols = 4;
 	static const int numElements = 10;
 	SparseMatrix::TripletMatrix triplet;
 
-	CSMatrixRMultAdd() : triplet(numRows, numCols, numElements)
+	CSMatrixRMultOp() : triplet(numRows, numCols, numElements)
 	{
 		triplet.addEntry(0, 0, 4.5f);
 		triplet.addEntry(0, 2, 3.2f);
@@ -198,7 +198,11 @@ protected:
 	SparseMatrix::CSRMatrix m;
 };
 
+template<typename CSMatrix_t>
+using CSMatrixRMultAdd = CSMatrixRMultOp<CSMatrix_t>;
+
 TYPED_TEST_SUITE(CSMatrixRMultAdd, CSMatrixTypes);
+
 TYPED_TEST(CSMatrixRMultAdd, EmptyMatrix) {
 	float mult[numRows] = { 1,2,3,4 };
 	float add[numRows] = { 5,6,7,8 };
@@ -246,6 +250,52 @@ TYPED_TEST(CSMatrixRMultAdd, Basic) {
 	float add[numRows] = { 5,6,7,8 };
 	const float resRef[numRows] = { 19.1, 12.7, 16., 15.5 };
 	m.rMultAdd(mult, add);
+	for (int i = 0; i < numRows; ++i) {
+		EXPECT_NEAR(resRef[i], add[i], 1e-6);
+	}
+}
+
+
+template<typename CSMatrix_t>
+using CSMatrixRMultSub = CSMatrixRMultOp<CSMatrix_t>;
+
+TYPED_TEST_SUITE(CSMatrixRMultSub, CSMatrixTypes);
+
+TYPED_TEST(CSMatrixRMultSub, SubMultZero) {
+	float mult[numRows] = {};
+	float add[numRows] = {};
+	const float resRef[numRows] = {};
+	m.rMultSub(mult, add);
+	for (int i = 0; i < numRows; ++i) {
+		EXPECT_NEAR(resRef[i], add[i], 1e-6);
+	}
+}
+
+TYPED_TEST(CSMatrixRMultSub, SubZero) {
+	float mult[numRows] = { 1,2,3,4 };
+	float add[numRows] = {};
+	const float resRef[numRows] = { -14.1, -12.5, -12.4, -8.3 };
+	m.rMultSub(mult, add);
+	for (int i = 0; i < numRows; ++i) {
+		EXPECT_NEAR(resRef[i], add[i], 1e-6);
+	}
+}
+
+TYPED_TEST(CSMatrixRMultSub, MultZero) {
+	float mult[numRows] = {};
+	float add[numRows] = { 5,6,7,8 };
+	const float resRef[numRows] = { 5,6,7,8 };
+	m.rMultSub(mult, add);
+	for (int i = 0; i < numRows; ++i) {
+		EXPECT_NEAR(resRef[i], add[i], 1e-6);
+	}
+}
+
+TYPED_TEST(CSMatrixRMultSub, Basic) {
+	float mult[numRows] = { 1,0,3,4 };
+	float add[numRows] = { 5,6,7,8 };
+	const float resRef[numRows] = { -9.1, -0.7, -2., 0.5 };
+	m.rMultSub(mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}
