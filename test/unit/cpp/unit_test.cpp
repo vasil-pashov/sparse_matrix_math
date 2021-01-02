@@ -209,7 +209,7 @@ TYPED_TEST(CSMatrixRMultAdd, EmptyMatrix) {
 	const float resRef[numRows] = { 5,6,7,8 };
 	SparseMatrix::TripletMatrix emptyTriplet(4, 4, 10);
 	TypeParam emptyMatrix(emptyTriplet);
-	emptyMatrix.rMultAdd(mult, add);
+	emptyMatrix.rMultAdd(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}
@@ -219,7 +219,7 @@ TYPED_TEST(CSMatrixRMultAdd, AddMultZero) {
 	float mult[numRows] = {};
 	float add[numRows] = {};
 	const float resRef[numRows] = {};
-	m.rMultAdd(mult, add);
+	m.rMultAdd(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}
@@ -229,7 +229,7 @@ TYPED_TEST(CSMatrixRMultAdd, AddZero) {
 	float mult[numRows] = { 1,2,3,4 };
 	float add[numRows] = {};
 	const float resRef[numRows] = { 14.1, 12.5, 12.4, 8.3 };
-	m.rMultAdd(mult, add);
+	m.rMultAdd(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}
@@ -239,7 +239,7 @@ TYPED_TEST(CSMatrixRMultAdd, MultZero) {
 	float mult[numRows] = {};
 	float add[numRows] = { 5,6,7,8 };
 	const float resRef[numRows] = { 5,6,7,8 };
-	m.rMultAdd(mult, add);
+	m.rMultAdd(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}
@@ -249,7 +249,7 @@ TYPED_TEST(CSMatrixRMultAdd, Basic) {
 	float mult[numRows] = { 1,0,3,4 };
 	float add[numRows] = { 5,6,7,8 };
 	const float resRef[numRows] = { 19.1, 12.7, 16., 15.5 };
-	m.rMultAdd(mult, add);
+	m.rMultAdd(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}
@@ -261,11 +261,23 @@ using CSMatrixRMultSub = CSMatrixRMultOp<CSMatrix_t>;
 
 TYPED_TEST_SUITE(CSMatrixRMultSub, CSMatrixTypes);
 
+TYPED_TEST(CSMatrixRMultSub, EmptyMatrix) {
+	float mult[numRows] = { 1,2,3,4 };
+	float add[numRows] = { 5,6,7,8 };
+	const float resRef[numRows] = { 5,6,7,8 };
+	SparseMatrix::TripletMatrix emptyTriplet(4, 4, 10);
+	TypeParam emptyMatrix(emptyTriplet);
+	emptyMatrix.rMultSub(add, mult, add);
+	for (int i = 0; i < numRows; ++i) {
+		EXPECT_NEAR(resRef[i], add[i], 1e-6);
+	}
+}
+
 TYPED_TEST(CSMatrixRMultSub, SubMultZero) {
 	float mult[numRows] = {};
 	float add[numRows] = {};
 	const float resRef[numRows] = {};
-	m.rMultSub(mult, add);
+	m.rMultSub(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}
@@ -275,7 +287,7 @@ TYPED_TEST(CSMatrixRMultSub, SubZero) {
 	float mult[numRows] = { 1,2,3,4 };
 	float add[numRows] = {};
 	const float resRef[numRows] = { -14.1, -12.5, -12.4, -8.3 };
-	m.rMultSub(mult, add);
+	m.rMultSub(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}
@@ -285,7 +297,7 @@ TYPED_TEST(CSMatrixRMultSub, MultZero) {
 	float mult[numRows] = {};
 	float add[numRows] = { 5,6,7,8 };
 	const float resRef[numRows] = { 5,6,7,8 };
-	m.rMultSub(mult, add);
+	m.rMultSub(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}
@@ -295,7 +307,7 @@ TYPED_TEST(CSMatrixRMultSub, Basic) {
 	float mult[numRows] = { 1,0,3,4 };
 	float add[numRows] = { 5,6,7,8 };
 	const float resRef[numRows] = { -9.1, -0.7, -2., 0.5 };
-	m.rMultSub(mult, add);
+	m.rMultSub(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}
@@ -346,4 +358,33 @@ TEST(CSRMatrixTest, CSRMatrixConstForwardIterator) {
 
 	++it;
 	EXPECT_TRUE(it == csr.end());
+}
+
+// =========================================================================
+// ============================== BiCGSymmetric ============================
+// =========================================================================
+
+TEST(BiCGSymmetric, SmallDenseMatrix) {
+	SparseMatrix::TripletMatrix triplet(4, 4, 16);
+	float dense[16] = { 30.49, 13.95, 9.6, 15.75, 13.95, 18.83, 4.93, 12.91, 9.6, 4.93, 11.89, 0.68, 15.75, 12.91, 0.68, 13.41 };
+	for (int row = 0; row < 4; ++row) {
+		for (int col = 0; col < 4; ++col) {
+			triplet.addEntry(row, col, dense[row * 4 + col]);
+		}
+	}
+
+	SparseMatrix::CSRMatrix csr(triplet);
+	SparseMatrix::Vector b(4);
+	b[0] = 1;
+	b[1] = 2;
+	b[2] = 3;
+	b[3] = 4;
+
+	SparseMatrix::Vector x(4, 0);
+
+	EXPECT_FALSE(SparseMatrix::BiCGSymmetric(csr, b, x));
+	float resRef[4] = { -5.57856, -5.62417, 6.40556, 11.9399 };
+	for (int i = 0; i < 4; ++i) {
+		EXPECT_NEAR(x[i], resRef[i], 1e-4);
+	}
 }

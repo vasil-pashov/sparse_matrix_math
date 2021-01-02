@@ -323,8 +323,9 @@ namespace SparseMatrix {
 		const int getDenseColCount() const noexcept;
 		ConstIterator begin() const noexcept;
 		ConstIterator end() const noexcept;
-		void rMultAdd(const float* const mult, float* const lhs) const noexcept;
-		void rMultSub(const float* const mult, float* const lhs) const noexcept;
+		void rMult(const float* const mult, float* const out) const noexcept;
+		void rMultAdd(const float* const lhs, const float* const mult, float* const out) const noexcept;
+		void rMultSub(const float* const lhs, const float* const mult, float* const out) const noexcept;
 	private:
 		/// Array which will hold all nonzero entries of the matrix.
 		/// This is of length  number of nonzero entries
@@ -343,7 +344,7 @@ namespace SparseMatrix {
 		const int fillArrays(const TripletMatrix& triplet) noexcept;
 		const int getNextStartIndex(int currentStartIndex, int startLength) const noexcept;
 		template<typename FunctorType>
-		void rMultOp(const float* const mult, float* const lhs, const FunctorType& op) const noexcept {
+		void rMultOp(const float* const lhs, const float* const mult, float* const out, const FunctorType& op) const noexcept {
 			for (int row = firstActiveStart; row < denseRowCount; row = getNextStartIndex(row, denseRowCount)) {
 				float dot = 0.0f;
 				for (int colIdx = start[row]; colIdx < start[row + 1]; ++colIdx) {
@@ -351,7 +352,7 @@ namespace SparseMatrix {
 					const float val = values[colIdx];
 					dot = std::fmaf(val, mult[col], dot);
 				}
-				lhs[row] = op(lhs[row], dot);
+				out[row] = op(lhs[row], dot);
 			}
 		}
 	};
@@ -419,19 +420,26 @@ namespace SparseMatrix {
 		return ConstIterator(values.get(), positions.get(), start.get(), denseRowCount, start[denseRowCount]);
 	}
 
-	inline void CSRMatrix::rMultAdd(const float* const mult, float* const lhs) const noexcept {
+	inline void CSRMatrix::rMult(const float* const mult, float* const res) const noexcept {
+		auto rhsId = [](const float lhs, const  float rhs) -> float {
+			return rhs;
+		};
+		rMultOp(res, mult, res, rhsId);
+	}
+
+	inline void CSRMatrix::rMultAdd(const float* const lhs, const float* const mult, float* const out) const noexcept {
 		auto addOp = [](const float lhs, const float rhs) ->float {
 			return lhs + rhs;
 		};
-		rMultOp(mult, lhs, addOp);
+		rMultOp(lhs, mult, out, addOp);
 	}
 
 
-	inline void CSRMatrix::rMultSub(const float* const mult, float* const lhs) const noexcept {
+	inline void CSRMatrix::rMultSub(const float* const lhs, const float* const mult, float* const out) const noexcept {
 		auto addOp = [](const float lhs, const float rhs) ->float {
 			return lhs - rhs;
 		};
-		rMultOp(mult, lhs, addOp);
+		rMultOp(lhs, mult, out, addOp);
 	}
 
 	inline const int CSRMatrix::getNextStartIndex(int currentStartIndex, int startLength) const noexcept {
@@ -587,6 +595,15 @@ namespace SparseMatrix {
 			}
 			return std::sqrt(sum);
 		}
+
+		const float operator*(const Vector& other) const {
+			assert(other.size == size);
+			float dot = 0.0f;
+			for (int i = 0; i < size; ++i) {
+				dot = std::fmaf(data[i], other[i], dot);
+			}
+			return dot;
+		}
 	private:
 		void initDataWithVal(const float val) {
 			if (val == 0.0f) {
@@ -604,8 +621,39 @@ namespace SparseMatrix {
 		int size;
 	};
 
-	template<typename CompressedMatrixFormat>
-	inline int BiCG(const CompressedMatrixFormat& a, const CompressedMatrixFormat& aT, const Vector& b1, const Vector& b2) {
-		
+	inline int BiCGSymmetric(const CSRMatrix& a, Vector& b, Vector& x) {
+		auto multAddVector = [](const Vector& lhs, const Vector& rhs, const float scalar, Vector& out) {
+			assert((lhs.getSize() == rhs.getSize()) && (rhs.getSize() == out.getSize()));
+			for (int i = 0; i < lhs.getSize(); ++i) {
+				out[i] = lhs[i] + scalar * rhs[i];
+			}
+		};
+
+		const float eps = 1e-4;
+		int numIterations = 100;
+		Vector r(b.getSize());
+		a.rMultSub(b, x, r);
+
+		Vector p(b.getSize());
+		for (int i = 0; i < p.getSize(); ++i) {
+			p[i] = r[i];
+		}
+
+		Vector ap(b.getSize());
+		a.rMult(p, ap);
+
+		float rSquare = r * r;
+		do {
+			const float alpha = rSquare / (ap * p);
+			multAddVector(x, p, alpha, x);
+			multAddVector(r, ap, -alpha, r);
+			const float newRSquare = r * r;
+			const float beta = newRSquare / rSquare;
+			multAddVector(r, p, beta, p);
+			rSquare = newRSquare;
+			numIterations--;
+			a.rMult(p, ap);
+		} while (r.secondNorm() > eps && numIterations > 0);
+		return numIterations <= 0;
 	}
 }
