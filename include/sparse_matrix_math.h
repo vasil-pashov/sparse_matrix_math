@@ -7,7 +7,7 @@
 #include <cinttypes>
 #include <cmath>
 
-namespace SparseMatrix {
+namespace SMM {
 	/// @brief Class to hold sparse matrix into triplet (coordinate) format.
 	/// Triplet format represents the matrix entries as list of triplets (row, col, value)
 	/// It is allowed repetition of elements, i.e. row and col can be the same for two
