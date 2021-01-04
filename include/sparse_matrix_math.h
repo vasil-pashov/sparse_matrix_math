@@ -7,6 +7,11 @@
 #include <cinttypes>
 #include <cmath>
 
+#ifdef SMM_MULTITHREADING_CPPTM
+#include <cpp_tm.h>
+#endif // SMM_MULTITHREADING_CPPTM
+
+
 namespace SMM {
 	/// @brief Class to hold sparse matrix into triplet (coordinate) format.
 	/// Triplet format represents the matrix entries as list of triplets (row, col, value)
@@ -323,9 +328,9 @@ namespace SMM {
 		const int getDenseColCount() const noexcept;
 		ConstIterator begin() const noexcept;
 		ConstIterator end() const noexcept;
-		void rMult(const float* const mult, float* const out) const noexcept;
-		void rMultAdd(const float* const lhs, const float* const mult, float* const out) const noexcept;
-		void rMultSub(const float* const lhs, const float* const mult, float* const out) const noexcept;
+		void rMult(const float* const mult, float* const out, const bool async = false) const noexcept;
+		void rMultAdd(const float* const lhs, const float* const mult, float* const out, const bool async = false) const noexcept;
+		void rMultSub(const float* const lhs, const float* const mult, float* const out, const bool async = false) const noexcept;
 	private:
 		/// Array which will hold all nonzero entries of the matrix.
 		/// This is of length  number of nonzero entries
@@ -344,7 +349,61 @@ namespace SMM {
 		const int fillArrays(const TripletMatrix& triplet) noexcept;
 		const int getNextStartIndex(int currentStartIndex, int startLength) const noexcept;
 		template<typename FunctorType>
-		void rMultOp(const float* const lhs, const float* const mult, float* const out, const FunctorType& op) const noexcept {
+		void rMultOp(
+			const float* const lhs,
+			const float* const mult,
+			float* const out,
+			const FunctorType& op,
+			const bool async
+		) const noexcept {
+#ifdef SMM_MULTITHREADING_CPPTM
+			struct rMultOpTask final : public CPPTM::ITask {
+				rMultOpTask(
+					const CSRMatrix* csr,
+					const float* const lhs,
+					const float* const mult,
+					float* const out,
+					const FunctorType& op
+				) :
+					csr(csr),
+					lhs(lhs),
+					mult(mult),
+					out(out),
+					op(op)
+				{ }
+
+				const CSRMatrix* csr;
+				const float* const lhs;
+				const float* const mult;
+				float* const out;
+				const FunctorType& op;
+
+				CPPTM::CPPTMStatus runTask(int blockIndex, int numBlocks) override {
+					const int rows = csr->getDenseRowCount();
+					const int blockSize = (rows + numBlocks) / numBlocks;
+					const int startIdx = blockSize * blockIndex;
+					const int end = std::min(rows, startIdx + blockSize);
+					const int start = startIdx == 0 ? csr->firstActiveStart : csr->getNextStartIndex(startIdx - 1, rows);
+					for (int row = start; row < end; row = csr->getNextStartIndex(row, rows)) {
+						float dot = 0.0f;
+						for (int colIdx = csr->start[row]; colIdx < csr->start[row + 1]; ++colIdx) {
+							const int col = csr->positions[colIdx];
+							const float val = csr->values[colIdx];
+							dot = std::fmaf(val, mult[col], dot);
+						}
+						out[row] = op(lhs[row], dot);
+					}
+					return CPPTM::CPPTMStatus::SUCCESS;
+				}
+			};
+			std::shared_ptr taskPtr = std::make_shared<rMultOpTask>(this, lhs, mult, out, op);
+			CPPTM::ThreadManager& globalTm = CPPTM::getGlobalTM();
+			if (async) {
+				globalTm.launchAsync(std::move(taskPtr));
+			} else {
+				globalTm.launchSync(std::move(taskPtr));
+			}
+#else
 			for (int row = firstActiveStart; row < denseRowCount; row = getNextStartIndex(row, denseRowCount)) {
 				float dot = 0.0f;
 				for (int colIdx = start[row]; colIdx < start[row + 1]; ++colIdx) {
@@ -354,6 +413,7 @@ namespace SMM {
 				}
 				out[row] = op(lhs[row], dot);
 			}
+#endif
 		}
 	};
 
@@ -420,26 +480,26 @@ namespace SMM {
 		return ConstIterator(values.get(), positions.get(), start.get(), denseRowCount, start[denseRowCount]);
 	}
 
-	inline void CSRMatrix::rMult(const float* const mult, float* const res) const noexcept {
+	inline void CSRMatrix::rMult(const float* const mult, float* const res, const bool async) const noexcept {
 		auto rhsId = [](const float lhs, const  float rhs) -> float {
 			return rhs;
 		};
-		rMultOp(res, mult, res, rhsId);
+		rMultOp(res, mult, res, rhsId, async);
 	}
 
-	inline void CSRMatrix::rMultAdd(const float* const lhs, const float* const mult, float* const out) const noexcept {
+	inline void CSRMatrix::rMultAdd(const float* const lhs, const float* const mult, float* const out, const bool async) const noexcept {
 		auto addOp = [](const float lhs, const float rhs) ->float {
 			return lhs + rhs;
 		};
-		rMultOp(lhs, mult, out, addOp);
+		rMultOp(lhs, mult, out, addOp, async);
 	}
 
 
-	inline void CSRMatrix::rMultSub(const float* const lhs, const float* const mult, float* const out) const noexcept {
+	inline void CSRMatrix::rMultSub(const float* const lhs, const float* const mult, float* const out, const bool async) const noexcept {
 		auto addOp = [](const float lhs, const float rhs) ->float {
 			return lhs - rhs;
 		};
-		rMultOp(lhs, mult, out, addOp);
+		rMultOp(lhs, mult, out, addOp, async);
 	}
 
 	inline const int CSRMatrix::getNextStartIndex(int currentStartIndex, int startLength) const noexcept {
