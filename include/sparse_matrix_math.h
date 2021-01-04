@@ -688,11 +688,16 @@ namespace SMM {
 		int size;
 	};
 
+	/// @brief solve a.x=b using BiConjugate gradient matrix, where matrix a is symmetric
+	/// @param[in] a Coefficient matrix for the system of equations
+	/// @param[in] b Right hand side for the system of equations
+	/// @param[in,out] x Initial condition, the result will be written here too 
+	/// @return 0 on success, != 0 on error
 	inline int BiCGSymmetric(const CSRMatrix& a, Vector& b, Vector& x) {
 		auto multAddVector = [](const Vector& lhs, const Vector& rhs, const float scalar, Vector& out) {
 			assert((lhs.getSize() == rhs.getSize()) && (rhs.getSize() == out.getSize()));
 			for (int i = 0; i < lhs.getSize(); ++i) {
-				out[i] = lhs[i] + scalar * rhs[i];
+				out[i] = std::fmaf(scalar, rhs[i], lhs[i]);
 			}
 		};
 
@@ -707,20 +712,33 @@ namespace SMM {
 		}
 
 		Vector ap(b.getSize());
-		a.rMult(p, ap);
 
 		float rSquare = r * r;
 		do {
+			a.rMult(p, ap);
+			const float denom = ap* p;
+			// Numerical instability will cause devision by zero (or something close to). The method must be restarted
+			if (eps > std::abs(denom)) {
+				return 1;
+			}
 			const float alpha = rSquare / (ap * p);
 			multAddVector(x, p, alpha, x);
 			multAddVector(r, ap, -alpha, r);
+			// Dot product r * r can be zero (or close to zero) only if r has length close to zero.
+			// But if the residual is close to zero, this means that we have found a solution
 			const float newRSquare = r * r;
+			if (eps > newRSquare) {
+				break;
+			}
 			const float beta = newRSquare / rSquare;
 			multAddVector(r, p, beta, p);
 			rSquare = newRSquare;
 			numIterations--;
-			a.rMult(p, ap);
 		} while (r.secondNorm() > eps && numIterations > 0);
-		return numIterations <= 0;
+
+		if (numIterations <= 0) {
+			return 1;
+		}
+		return 0;
 	}
 }
