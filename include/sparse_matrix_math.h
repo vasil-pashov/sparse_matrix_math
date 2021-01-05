@@ -378,7 +378,7 @@ namespace SMM {
 				float* const out;
 				const FunctorType& op;
 
-				CPPTM::CPPTMStatus runTask(int blockIndex, int numBlocks) override {
+				CPPTM::CPPTMStatus runTask(int blockIndex, int numBlocks) noexcept override {
 					const int rows = csr->getDenseRowCount();
 					const int blockSize = (rows + numBlocks) / numBlocks;
 					const int startIdx = blockSize * blockIndex;
@@ -398,11 +398,10 @@ namespace SMM {
 			};
 			CPPTM::ThreadManager& globalTm = CPPTM::getGlobalTM();
 			if (async) {
-				std::shared_ptr taskPtr = std::make_shared<rMultOpTask>(this, lhs, mult, out, op);
-				globalTm.launchAsync(taskPtr);
+				globalTm.launchAsync(std::make_unique<rMultOpTask>(this, lhs, mult, out, op));
 			} else {
 				rMultOpTask task(this, lhs, mult, out, op);
-				globalTm.launchSync(task);
+				globalTm.launchSync(&task);
 			}
 #else
 			for (int row = firstActiveStart; row < denseRowCount; row = getNextStartIndex(row, denseRowCount)) {
