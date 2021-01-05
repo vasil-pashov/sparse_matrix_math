@@ -396,12 +396,13 @@ namespace SMM {
 					return CPPTM::CPPTMStatus::SUCCESS;
 				}
 			};
-			std::shared_ptr taskPtr = std::make_shared<rMultOpTask>(this, lhs, mult, out, op);
 			CPPTM::ThreadManager& globalTm = CPPTM::getGlobalTM();
 			if (async) {
-				globalTm.launchAsync(std::move(taskPtr));
+				std::shared_ptr taskPtr = std::make_shared<rMultOpTask>(this, lhs, mult, out, op);
+				globalTm.launchAsync(taskPtr);
 			} else {
-				globalTm.launchSync(std::move(taskPtr));
+				rMultOpTask task(this, lhs, mult, out, op);
+				globalTm.launchSync(task);
 			}
 #else
 			for (int row = firstActiveStart; row < denseRowCount; row = getNextStartIndex(row, denseRowCount)) {
