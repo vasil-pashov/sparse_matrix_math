@@ -6,6 +6,7 @@
 #include <utility>
 #include <cinttypes>
 #include <cmath>
+#include <fstream>
 
 #ifdef SMM_MULTITHREADING_CPPTM
 #include <cpp_tm.h>
@@ -47,6 +48,7 @@ namespace SMM {
 		};
 	public:
 		using ConstIterator = std::vector<TripletEl>::const_iterator;
+		TripletMatrix();
 		/// @brief Initialize triplet matrix with given number of rows and columns
 		/// The number of rows and columns does not have any affect the space allocated by the matrix
 		/// @param[in] rowCount Number of rows which the dense form of the matrix is supposed to have
@@ -65,6 +67,15 @@ namespace SMM {
 		TripletMatrix& operator=(TripletMatrix&&) = default;
 		TripletMatrix(const TripletMatrix&) = delete;
 		TripletMatrix& operator=(const TripletMatrix&) = delete;
+		/// @brief Initialize triplet matrix.
+		/// Be sure to call this on empty matrices (either created via the default constructor or after calling deinit())
+		/// @param[in] rowCount Number of rows which the dense form of the matrix is supposed to have
+		/// @param[in] colCount Number of columns which the dense form of the matrix is supposed to have
+		/// @param[in] numTriplets How many elements to allocate space for.
+		void init(int rowCount, int colCount, int numTriplets);
+		/// @brief Free all memory used by the matrix and make it look like an empty matrix
+		/// Will also set the number of dense rows and cols to zero
+		void deinit();
 		/// @brief Add triplet entry to the matrix
 		/// @param row Row of the element
 		/// @param col Column of the element
@@ -98,6 +109,11 @@ namespace SMM {
 		int denseColCount; ///< Number of columns in the matrix
 	};
 
+	TripletMatrix::TripletMatrix() :
+		denseRowCount(0),
+		denseColCount(0)
+	{ }
+
 	TripletMatrix::TripletMatrix(int denseRowCount, int denseColCount) noexcept :
 		denseRowCount(denseRowCount),
 		denseColCount(denseColCount)
@@ -108,6 +124,20 @@ namespace SMM {
 		denseColCount(denseColCount)
 	{
 		data.reserve(numTriplets);
+	}
+
+	void TripletMatrix::init(const int denseRowCount, const int denseColCount, const int numTriplets) {
+		assert(getNonZeroCount() == 0 && denseColCount == 0 && denseRowCount == 0);
+		this->denseRowCount = denseRowCount;
+		this->denseColCount = denseColCount;
+		this->data.reserve(numTriplets);
+	}
+
+	void TripletMatrix::deinit() {
+		denseRowCount = 0;
+		denseColCount = 0;
+		data.resize(0);
+		data.shrink_to_fit();
 	}
 
 	void TripletMatrix::addEntry(int row, int col, float value) {
@@ -740,5 +770,61 @@ namespace SMM {
 			return 1;
 		}
 		return 0;
+	}
+
+	enum class MatrixLoadStatus {
+		SUCCESS = 0,
+		FAILED_TO_OPEN_FILE,
+		FAILED_TO_OPEN_FILE_UNKNOWN_FORMAT,
+		FAILED_TO_PARSE_FILE,
+
+	};
+
+	/// @brief Load matrix in matrix market format
+	/// The format has comments starting with %
+	/// First actual rows is the number of rows number of cols and number of non zero elements
+	/// Next number of non zero elements represent element in coordinate form (row, col, value)
+	/// @param filename Path to the file with the matrix
+	/// @param out Matrix in triplet (coordinate) for containing the data from the file
+	/// @return MatrixLoadStatus Error code for the function
+	inline MatrixLoadStatus loadMatrixMarketMatrix(const char* filepath, TripletMatrix& out) {
+		std::ifstream file(filepath);
+		if (!file.is_open()) {
+			return MatrixLoadStatus::FAILED_TO_OPEN_FILE;
+		}
+		const auto skipComments = [&file]() {
+			while (file.peek() == '%') {
+				// Skip comments
+				file.ignore(std::numeric_limits<int>::max(), '\n');
+			}
+		};
+
+		skipComments();
+		int rows, cols, nnz;
+		file >> rows >> cols >> nnz;
+		if (!file.good()) {
+			return MatrixLoadStatus::FAILED_TO_PARSE_FILE;
+		}
+		out.init(rows, cols, nnz);
+		while (!file.eof()) {
+			int row, col;
+			float value;
+			file >> row >> col >> value;
+			if (!file.good()) {
+				return MatrixLoadStatus::FAILED_TO_PARSE_FILE;
+			}
+			out.addEntry(row, col, value);
+			skipComments();
+		}
+		return MatrixLoadStatus::SUCCESS;
+	}
+
+	inline MatrixLoadStatus loadMatrix(const char* filepath, TripletMatrix& out) {
+		const char* fileExtension = strrchr(filepath, '.') + 1;
+		if (strcmp(fileExtension, "mtx") == 0) {
+			return loadMatrixMarketMatrix(filepath, out);
+		} else {
+			return MatrixLoadStatus::FAILED_TO_OPEN_FILE_UNKNOWN_FORMAT;
+		}
 	}
 }
