@@ -383,3 +383,17 @@ TEST(BiCGSymmetric, SmallDenseMatrix) {
 		EXPECT_NEAR(x[i], resRef[i], 1e-4);
 	}
 }
+
+// =========================================================================
+// ============================== FILE LOAD ================================
+// =========================================================================
+
+TEST(LoadFile, LoadMatrixMarket) {
+	const std::string path = ASSET_PATH + std::string("ex5.mtx");
+	SMM::TripletMatrix triplet;
+	const SMM::MatrixLoadStatus status = SMM::loadMatrix(path.c_str(), triplet);
+	ASSERT_EQ(status, SMM::MatrixLoadStatus::SUCCESS);
+	EXPECT_EQ(triplet.getDenseRowCount(), 27);
+	EXPECT_EQ(triplet.getDenseColCount(), 27);
+	EXPECT_EQ(triplet.getNonZeroCount(), 279);
+}

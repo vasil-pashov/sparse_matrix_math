@@ -7,6 +7,7 @@
 #include <cinttypes>
 #include <cmath>
 #include <fstream>
+#include <cctype>
 
 #ifdef SMM_MULTITHREADING_CPPTM
 #include <cpp_tm.h>
@@ -127,7 +128,7 @@ namespace SMM {
 	}
 
 	void TripletMatrix::init(const int denseRowCount, const int denseColCount, const int numTriplets) {
-		assert(getNonZeroCount() == 0 && denseColCount == 0 && denseRowCount == 0);
+		assert(getNonZeroCount() == 0 && getDenseRowCount() == 0 && getDenseColCount() == 0);
 		this->denseRowCount = denseRowCount;
 		this->denseColCount = denseColCount;
 		this->data.reserve(numTriplets);
@@ -136,7 +137,7 @@ namespace SMM {
 	void TripletMatrix::deinit() {
 		denseRowCount = 0;
 		denseColCount = 0;
-		data.resize(0);
+		data.clear();
 		data.shrink_to_fit();
 	}
 
@@ -144,7 +145,7 @@ namespace SMM {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
 		assert(col >= 0 && row < denseColCount);
-		const uint64_t key = static_cast<uint64_t>(row) << sizeof(int) | static_cast<uint64_t>(col);
+		const uint64_t key = (uint64_t(row) << 32) | uint64_t(col);
 		auto it = entryIndex.find(key);
 		if (it == entryIndex.end()) {
 			const int tripletIndex = data.size();
@@ -773,10 +774,19 @@ namespace SMM {
 	}
 
 	enum class MatrixLoadStatus {
+		// Generic success code
 		SUCCESS = 0,
+		// Generic failure codes
 		FAILED_TO_OPEN_FILE,
 		FAILED_TO_OPEN_FILE_UNKNOWN_FORMAT,
 		FAILED_TO_PARSE_FILE,
+
+		// Error codes for MMX files
+		PARSE_ERROR_MMX_FILE_MISSING_BANNER,
+		PARSE_ERROR_MMX_FILE_UNSUPPORTED_TYPE,
+		PARSE_ERROR_MMX_FILE_UNSUPPORTED_FORMAT,
+		PARSE_ERROR_MMX_FILE_UNSUPPORTED_EL_TYPE,
+		PARSE_ERROR_MMX_FILE_UNSUPPORTED_STRUCTURE
 
 	};
 
@@ -792,29 +802,76 @@ namespace SMM {
 		if (!file.is_open()) {
 			return MatrixLoadStatus::FAILED_TO_OPEN_FILE;
 		}
-		const auto skipComments = [&file]() {
-			while (file.peek() == '%') {
-				// Skip comments
-				file.ignore(std::numeric_limits<int>::max(), '\n');
+
+		auto tolower = [](std::string& str) {
+			for (char& c : str) {
+				c = std::tolower(unsigned char(c));
 			}
 		};
 
-		skipComments();
+		// Read banner
+		std::string banner, matrix, format, type, structure;
+		file >> banner;
+		if (banner != "%%MatrixMarket") {
+			return MatrixLoadStatus::PARSE_ERROR_MMX_FILE_MISSING_BANNER;
+		}
+
+		file >> matrix;
+		tolower(matrix);
+		if (matrix != "matrix") {
+			return MatrixLoadStatus::PARSE_ERROR_MMX_FILE_UNSUPPORTED_TYPE;
+		}
+
+		file >> format;
+		tolower(format);
+		if (format != "coordinate") {
+			return MatrixLoadStatus::PARSE_ERROR_MMX_FILE_UNSUPPORTED_FORMAT;
+		}
+
+		file >> type;
+		tolower(type);
+		if (type != "real" && type != "integer") {
+			MatrixLoadStatus::PARSE_ERROR_MMX_FILE_UNSUPPORTED_EL_TYPE;
+		}
+
+		file >> structure;
+		tolower(structure);
+		if (structure != "symmetric") {
+			MatrixLoadStatus::PARSE_ERROR_MMX_FILE_UNSUPPORTED_STRUCTURE;
+		}
+		
+		// Skip comment section
+		while (file.peek() == '%' || std::isspace(file.peek())) {
+			file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		}
+		// Read matrix size
 		int rows, cols, nnz;
 		file >> rows >> cols >> nnz;
-		if (!file.good()) {
+		if (file.fail()) {
 			return MatrixLoadStatus::FAILED_TO_PARSE_FILE;
 		}
 		out.init(rows, cols, nnz);
+		// Read matrix
+		int filerow = 0;
 		while (!file.eof()) {
 			int row, col;
 			float value;
 			file >> row >> col >> value;
-			if (!file.good()) {
+			if (file.fail()) {
 				return MatrixLoadStatus::FAILED_TO_PARSE_FILE;
 			}
+			// In file format indexes start from 0
+			row -= 1; col -= 1;
+			// Current implementation supports only symmetric matrices
 			out.addEntry(row, col, value);
-			skipComments();
+			if (row != col) {
+				out.addEntry(col, row, value);
+			}
+			// Hacky way to ignore empty lines. This will ignore anything that starts with an empty space/tab/newline
+			while (std::isspace(file.peek())) {
+				file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			}
+			filerow++;
 		}
 		return MatrixLoadStatus::SUCCESS;
 	}
