@@ -574,6 +574,70 @@ namespace SMM {
 		return 0;
 	}
 
+	inline void saveDenseText(const char* filepath, const CSRMatrix& m) {
+		std::ofstream file(filepath);
+		if (!file.is_open()) {
+			return;
+		}
+		file << std::fixed << std::setprecision(6);
+		const auto writeZeroes = [&file](int numZeroes) -> void {
+			for (int i = 0; i < numZeroes; ++i) {
+				file << "0";
+				if (i < numZeroes - 1) {
+					file << ",";
+				}
+			}
+		};
+
+		const auto writeEmptyRows = [&file, cols=m.getDenseColCount(), &writeZeroes](int numRows) -> void {
+			for (int i = 0; i < numRows; ++i) {
+				file << "{"; writeZeroes(cols); file << "}";
+				if (i < numRows - 1) {
+					file << ",\n";
+				}
+			}
+		};
+
+		int lastRow = -1, lastCol = -1;
+		CSRMatrix::ConstIterator it = m.begin();
+		file << m.getDenseRowCount() << " " << m.getDenseColCount() << "\n";
+		file << "{\n";
+		while (it != m.end()) {
+			const int emptyRows = it->getRow() - lastRow - 1;
+			lastCol = -1;
+			writeEmptyRows(emptyRows);
+			if (emptyRows && it->getRow() && lastRow != m.getDenseRowCount() - 1) {
+				file << ",\n";
+			}
+			lastRow = it->getRow();
+			file << "{";
+			int emptyCols = 0;
+			while (it != m.end() && it->getRow() == lastRow) {
+				emptyCols = it->getCol() - lastCol - 1;
+				lastCol = it->getCol();
+				writeZeroes(emptyCols);
+				if (lastCol > 0 && emptyCols) {
+					file << ",";
+				}
+				file << it->getValue();
+				if (it->getCol() != m.getDenseColCount() - 1) {
+					file << ",";
+				}
+				++it;
+			}
+			emptyCols = m.getDenseColCount() - lastCol - 1;
+			writeZeroes(emptyCols);
+			file << "}";
+			if (lastRow < m.getDenseRowCount() - 1) {
+				file << ",";
+			}
+			file << "\n";
+		}
+		const int emptyRows = m.getDenseRowCount() - lastRow - 1;
+		writeEmptyRows(emptyRows);
+		file << "}";
+	}
+
 	/// @brief Function to convert matrix from compressed sparse row format to dense row major matrix
 	/// Out must be allocated and filled with zero before being passed to the function
 	/// Out will be contain linearized dense version of the matrix, first CSRMatrix::getDenseRowCount elements
@@ -702,6 +766,15 @@ namespace SMM {
 			}
 			return dot;
 		}
+
+		float* const begin() noexcept {
+			return data;
+		}
+
+		float* const end() noexcept {
+			return data + size;
+		}
+
 	private:
 		void initDataWithVal(const float val) {
 			if (val == 0.0f) {
@@ -724,25 +797,24 @@ namespace SMM {
 	/// @param[in] b Right hand side for the system of equations
 	/// @param[in,out] x Initial condition, the result will be written here too 
 	/// @return 0 on success, != 0 on error
-	inline int BiCGSymmetric(const CSRMatrix& a, Vector& b, Vector& x) {
-		auto multAddVector = [](const Vector& lhs, const Vector& rhs, const float scalar, Vector& out) {
-			assert((lhs.getSize() == rhs.getSize()) && (rhs.getSize() == out.getSize()));
-			for (int i = 0; i < lhs.getSize(); ++i) {
+	inline int BiCGSymmetric(const CSRMatrix& a, float* b, float* x) {
+		auto multAddVector = [size=a.getDenseRowCount()](const float* lhs, const float* rhs, const float scalar, float* out) {
+			for (int i = 0; i < size; ++i) {
 				out[i] = std::fmaf(scalar, rhs[i], lhs[i]);
 			}
 		};
 
 		const float eps = 1e-4;
 		int numIterations = 100;
-		Vector r(b.getSize());
+		Vector r(a.getDenseRowCount());
 		a.rMultSub(b, x, r);
 
-		Vector p(b.getSize());
+		Vector p(a.getDenseRowCount());
 		for (int i = 0; i < p.getSize(); ++i) {
 			p[i] = r[i];
 		}
 
-		Vector ap(b.getSize());
+		Vector ap(a.getDenseRowCount());
 
 		float rSquare = r * r;
 		do {
@@ -876,10 +948,48 @@ namespace SMM {
 		return MatrixLoadStatus::SUCCESS;
 	}
 
+	inline MatrixLoadStatus loadSMMDTMatrix(const char* filepath, TripletMatrix& out) {
+		std::ifstream file(filepath);
+		if (!file.is_open()) {
+			return MatrixLoadStatus::FAILED_TO_OPEN_FILE;
+		}
+
+		int rows, cols;
+		file >> rows >> cols;
+		if (file.fail()) {
+			return MatrixLoadStatus::FAILED_TO_PARSE_FILE;
+		}
+
+		out.init(rows, cols, 0);
+		file.ignore(std::numeric_limits<std::streamsize>::max(), '{');
+		for (int i = 0; i < rows; ++i) {
+			file.ignore(std::numeric_limits<std::streamsize>::max(), '{');
+			for (int j = 0; j < cols; ++j) {
+				float val;
+				file >> val;
+				if (file.fail()) {
+					return MatrixLoadStatus::FAILED_TO_PARSE_FILE;
+				}
+				if (val != 0) {
+					out.addEntry(i, j, val);
+				}
+				file.ignore(1, ',');
+			}
+			file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		}
+		file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		if (file.fail()) {
+			return MatrixLoadStatus::FAILED_TO_PARSE_FILE;
+		}
+		return MatrixLoadStatus::SUCCESS;
+	}
+
 	inline MatrixLoadStatus loadMatrix(const char* filepath, TripletMatrix& out) {
 		const char* fileExtension = strrchr(filepath, '.') + 1;
 		if (strcmp(fileExtension, "mtx") == 0) {
 			return loadMatrixMarketMatrix(filepath, out);
+		} else if (strcmp(fileExtension, "smmdt") == 0) {
+			return loadSMMDTMatrix(filepath, out);
 		} else {
 			return MatrixLoadStatus::FAILED_TO_OPEN_FILE_UNKNOWN_FORMAT;
 		}
