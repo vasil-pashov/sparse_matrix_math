@@ -13,8 +13,12 @@
 #include <cpp_tm.h>
 #endif // SMM_MULTITHREADING_CPPTM
 
-
 namespace SMM {
+#ifdef SMM_DEBUG_DOUBLE
+	using real = double;
+#else
+	using real = float;
+#endif
 	/// @brief Class to hold sparse matrix into triplet (coordinate) format.
 	/// Triplet format represents the matrix entries as list of triplets (row, col, value)
 	/// It is allowed repetition of elements, i.e. row and col can be the same for two
@@ -27,7 +31,7 @@ namespace SMM {
 		class TripletEl {
 		public:
 			friend class TripletMatrix;
-			TripletEl(int row, int col, float value) noexcept :
+			TripletEl(int row, int col, real value) noexcept :
 				row(row),
 				col(col),
 				value(value) {
@@ -40,12 +44,12 @@ namespace SMM {
 			const int getCol() const noexcept {
 				return col;
 			}
-			const float getValue() const noexcept {
+			const real getValue() const noexcept {
 				return value;
 			}
 		private:
 			int row, col;
-			float value;
+			real value;
 		};
 	public:
 		using ConstIterator = std::vector<TripletEl>::const_iterator;
@@ -81,7 +85,7 @@ namespace SMM {
 		/// @param row Row of the element
 		/// @param col Column of the element
 		/// @param value The value of the element at (row, col)
-		void addEntry(int row, int col, float value);
+		void addEntry(int row, int col, real value);
 		/// @brief Get constant iterator to the first element of the triplet list
 		/// @return Constant iterator to the first element of the triplet list
 		ConstIterator begin() const noexcept;
@@ -141,7 +145,7 @@ namespace SMM {
 		data.shrink_to_fit();
 	}
 
-	void TripletMatrix::addEntry(int row, int col, float value) {
+	void TripletMatrix::addEntry(int row, int col, real value) {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
 		assert(col >= 0 && row < denseColCount);
@@ -183,14 +187,14 @@ namespace SMM {
 
 	class CSRElement {
 	public:
-		const float getValue() const noexcept;
+		const real getValue() const noexcept;
 		const int getRow() const noexcept;
 		const int getCol() const noexcept;
 		friend void swap(CSRElement& a, CSRElement& b) noexcept;
 		friend class CSRConstIterator;
 	protected:
 		CSRElement(
-			const float* values,
+			const real* values,
 			const int* positions,
 			const int* start,
 			const int currentStartIndex,
@@ -202,7 +206,7 @@ namespace SMM {
 		const bool operator==(const CSRElement&) const;
 
 		/// Non owning pointer to the list of non zero elements of the matrix
-		const float* values;
+		const real* values;
 		/// If format is CSR this is the column if the i-th value
 		/// If format is CSC this is the row of the i-th value
 		const int* positions;
@@ -216,7 +220,7 @@ namespace SMM {
 	};
 
 	CSRElement::CSRElement(
-		const float* values,
+		const real* values,
 		const int* positions,
 		const int* start,
 		const int currentStartIndex,
@@ -229,7 +233,7 @@ namespace SMM {
 		currentPositionIndex(currentPositionIndex) {
 	}
 
-	const float CSRElement::getValue() const noexcept {
+	const real CSRElement::getValue() const noexcept {
 		return values[currentPositionIndex];
 	}
 
@@ -267,7 +271,7 @@ namespace SMM {
 
 		CSRConstIterator() = default;
 		CSRConstIterator(
-			const float* values,
+			const real* values,
 			const int* positions,
 			const int* start,
 			const int currentStartIndex,
@@ -287,7 +291,7 @@ namespace SMM {
 	};
 
 	CSRConstIterator::CSRConstIterator(
-		const float* values,
+		const real* values,
 		const int* positions,
 		const int* start,
 		const int currentStartIndex,
@@ -359,13 +363,13 @@ namespace SMM {
 		const int getDenseColCount() const noexcept;
 		ConstIterator begin() const noexcept;
 		ConstIterator end() const noexcept;
-		void rMult(const float* const mult, float* const out, const bool async = false) const noexcept;
-		void rMultAdd(const float* const lhs, const float* const mult, float* const out, const bool async = false) const noexcept;
-		void rMultSub(const float* const lhs, const float* const mult, float* const out, const bool async = false) const noexcept;
+		void rMult(const real* const mult, real* const out, const bool async = false) const noexcept;
+		void rMultAdd(const real* const lhs, const real* const mult, real* const out, const bool async = false) const noexcept;
+		void rMultSub(const real* const lhs, const real* const mult, real* const out, const bool async = false) const noexcept;
 	private:
 		/// Array which will hold all nonzero entries of the matrix.
 		/// This is of length  number of nonzero entries
-		std::unique_ptr<float[]> values;
+		std::unique_ptr<real[]> values;
 		/// If format is CSR this is the column if the i-th value
 		/// If format is CSC this is the row of the i-th value
 		std::unique_ptr<int[]> positions;
@@ -381,9 +385,9 @@ namespace SMM {
 		const int getNextStartIndex(int currentStartIndex, int startLength) const noexcept;
 		template<typename FunctorType>
 		void rMultOp(
-			const float* const lhs,
-			const float* const mult,
-			float* const out,
+			const real* const lhs,
+			const real* const mult,
+			real* const out,
 			const FunctorType& op,
 			const bool async
 		) const noexcept {
@@ -391,9 +395,9 @@ namespace SMM {
 			struct rMultOpTask final : public CPPTM::ITask {
 				rMultOpTask(
 					const CSRMatrix* csr,
-					const float* const lhs,
-					const float* const mult,
-					float* const out,
+					const real* const lhs,
+					const real* const mult,
+					real* const out,
 					const FunctorType& op
 				) :
 					csr(csr),
@@ -404,9 +408,9 @@ namespace SMM {
 				{ }
 
 				const CSRMatrix* csr;
-				const float* const lhs;
-				const float* const mult;
-				float* const out;
+				const real* const lhs;
+				const real* const mult;
+				real* const out;
 				const FunctorType& op;
 
 				CPPTM::CPPTMStatus runTask(int blockIndex, int numBlocks) noexcept override {
@@ -416,11 +420,11 @@ namespace SMM {
 					const int end = std::min(rows, startIdx + blockSize);
 					const int start = startIdx == 0 ? csr->firstActiveStart : csr->getNextStartIndex(startIdx - 1, rows);
 					for (int row = start; row < end; row = csr->getNextStartIndex(row, rows)) {
-						float dot = 0.0f;
+						real dot = 0.0f;
 						for (int colIdx = csr->start[row]; colIdx < csr->start[row + 1]; ++colIdx) {
 							const int col = csr->positions[colIdx];
-							const float val = csr->values[colIdx];
-							dot = std::fmaf(val, mult[col], dot);
+							const real val = csr->values[colIdx];
+							dot = std::fma(val, mult[col], dot);
 						}
 						out[row] = op(lhs[row], dot);
 					}
@@ -436,11 +440,11 @@ namespace SMM {
 			}
 #else
 			for (int row = firstActiveStart; row < denseRowCount; row = getNextStartIndex(row, denseRowCount)) {
-				float dot = 0.0f;
+				real dot = 0.0f;
 				for (int colIdx = start[row]; colIdx < start[row + 1]; ++colIdx) {
 					const int col = positions[colIdx];
-					const float val = values[colIdx];
-					dot = std::fmaf(val, mult[col], dot);
+					const real val = values[colIdx];
+					dot = std::fma(val, mult[col], dot);
 				}
 				out[row] = op(lhs[row], dot);
 			}
@@ -458,7 +462,7 @@ namespace SMM {
 	{ }
 
 	CSRMatrix::CSRMatrix(const TripletMatrix& triplet) noexcept :
-		values(new float[triplet.getNonZeroCount()]),
+		values(new real[triplet.getNonZeroCount()]),
 		positions(new int[triplet.getNonZeroCount()]),
 		start(new int[triplet.getDenseRowCount() + 1]),
 		denseRowCount(triplet.getDenseRowCount()),
@@ -472,7 +476,7 @@ namespace SMM {
 		denseRowCount = triplet.getDenseRowCount();
 		denseColCount = triplet.getDenseColCount();
 		const int nnz = triplet.getNonZeroCount();
-		values.reset(new float[nnz]);
+		values.reset(new real[nnz]);
 		if (!values) {
 			return 1;
 		}
@@ -511,23 +515,23 @@ namespace SMM {
 		return ConstIterator(values.get(), positions.get(), start.get(), denseRowCount, start[denseRowCount]);
 	}
 
-	inline void CSRMatrix::rMult(const float* const mult, float* const res, const bool async) const noexcept {
-		auto rhsId = [](const float lhs, const  float rhs) -> float {
+	inline void CSRMatrix::rMult(const real* const mult, real* const res, const bool async) const noexcept {
+		auto rhsId = [](const real lhs, const  real rhs) -> real {
 			return rhs;
 		};
 		rMultOp(res, mult, res, rhsId, async);
 	}
 
-	inline void CSRMatrix::rMultAdd(const float* const lhs, const float* const mult, float* const out, const bool async) const noexcept {
-		auto addOp = [](const float lhs, const float rhs) ->float {
+	inline void CSRMatrix::rMultAdd(const real* const lhs, const real* const mult, real* const out, const bool async) const noexcept {
+		auto addOp = [](const real lhs, const real rhs) ->real {
 			return lhs + rhs;
 		};
 		rMultOp(lhs, mult, out, addOp, async);
 	}
 
 
-	inline void CSRMatrix::rMultSub(const float* const lhs, const float* const mult, float* const out, const bool async) const noexcept {
-		auto addOp = [](const float lhs, const float rhs) ->float {
+	inline void CSRMatrix::rMultSub(const real* const lhs, const real* const mult, real* const out, const bool async) const noexcept {
+		auto addOp = [](const real lhs, const real rhs) ->real {
 			return lhs - rhs;
 		};
 		rMultOp(lhs, mult, out, addOp, async);
@@ -645,7 +649,7 @@ namespace SMM {
 	/// @param[in] compressed Matrix in Compressed Sparse Row format
 	/// @param[out] out Preallocated (and filled with zero) space where the dense matrix will be added
 	template<typename CompressedMatrixFormat>
-	inline void toLinearDenseRowMajor(const CompressedMatrixFormat& compressed, float* out) noexcept {
+	inline void toLinearDenseRowMajor(const CompressedMatrixFormat& compressed, real* out) noexcept {
 		const int64_t colCount = compressed.getDenseColCount();
 		for (const auto& el : compressed) {
 			const int64_t index = el.getRow() * colCount + el.getCol();
@@ -662,18 +666,18 @@ namespace SMM {
 
 		Vector(const int size) noexcept :
 			size(size),
-			data(static_cast<float*>(malloc(size * sizeof(float))))
+			data(static_cast<real*>(malloc(size * sizeof(real))))
 		{ }
 
-		Vector(const int size, const float val) noexcept :
+		Vector(const int size, const real val) noexcept :
 			size(size)
 		{
 			initDataWithVal(val);
 		}
 
-		Vector(const std::initializer_list<float>& l) :
+		Vector(const std::initializer_list<real>& l) :
 			size(l.size()),
-			data(static_cast<float*>(malloc(l.size() * sizeof(float))))
+			data(static_cast<real*>(malloc(l.size() * sizeof(real))))
 		{
 			std::copy(l.begin(), l.end(), data);
 		}
@@ -707,10 +711,10 @@ namespace SMM {
 		void init(const int size) {
 			assert(this->size == 0 && data == nullptr);
 			this->size = size;
-			data = static_cast<float*>(malloc(size * sizeof(float)));
+			data = static_cast<real*>(malloc(size * sizeof(real)));
 		}
 
-		void init(const int size, const float val) {
+		void init(const int size, const real val) {
 			assert(this->size == 0 && data == nullptr);
 			this->size = size;
 			initDataWithVal(val);
@@ -720,16 +724,16 @@ namespace SMM {
 			return this->size;
 		}
 
-		operator float* const() {
+		operator real* const() {
 			return data;
 		}
 
-		const float operator[](const int index) const {
+		const real operator[](const int index) const {
 			assert(index < size);
 			return data[index];
 		}
 
-		float& operator[](const int index) {
+		real& operator[](const int index) {
 			assert(index < size);
 			return data[index];
 		}
@@ -750,45 +754,45 @@ namespace SMM {
 			return *this;
 		}
 
-		const float secondNorm() const {
-			float sum = 0.0f;
+		const real secondNorm() const {
+			real sum = 0.0f;
 			for (int i = 0; i < size; ++i) {
 				sum += data[i] * data[i];
 			}
 			return std::sqrt(sum);
 		}
 
-		const float operator*(const Vector& other) const {
+		const real operator*(const Vector& other) const {
 			assert(other.size == size);
-			float dot = 0.0f;
+			real dot = 0.0f;
 			for (int i = 0; i < size; ++i) {
-				dot = std::fmaf(data[i], other[i], dot);
+				dot = std::fma(data[i], other[i], dot);
 			}
 			return dot;
 		}
 
-		float* const begin() noexcept {
+		real* const begin() noexcept {
 			return data;
 		}
 
-		float* const end() noexcept {
+		real* const end() noexcept {
 			return data + size;
 		}
 
 	private:
-		void initDataWithVal(const float val) {
+		void initDataWithVal(const real val) {
 			if (val == 0.0f) {
-				data = static_cast<float*>(calloc(size, sizeof(float)));
+				data = static_cast<real*>(calloc(size, sizeof(real)));
 			} else {
-				const int64_t byteSize = int64_t(size) * sizeof(float);
-				data = static_cast<float*>(malloc(byteSize));
+				const int64_t byteSize = int64_t(size) * sizeof(real);
+				data = static_cast<real*>(malloc(byteSize));
 				if (!data) return;
 				for (int i = 0; i < this->size; ++i) {
 					data[i] = val;
 				}
 			}
 		}
-		float* data;
+		real* data;
 		int size;
 	};
 
@@ -797,14 +801,14 @@ namespace SMM {
 	/// @param[in] b Right hand side for the system of equations
 	/// @param[in,out] x Initial condition, the result will be written here too 
 	/// @return 0 on success, != 0 on error
-	inline int BiCGSymmetric(const CSRMatrix& a, float* b, float* x, int maxIterations, float eps) {
+	inline int BiCGSymmetric(const CSRMatrix& a, real* b, real* x, int maxIterations, real eps) {
 		maxIterations = std::min(maxIterations, a.getDenseRowCount());
 		if (maxIterations == -1) {
 			maxIterations = a.getDenseRowCount();
 		}
-		auto multAddVector = [size=a.getDenseRowCount()](const float* lhs, const float* rhs, const float scalar, float* out) {
+		auto multAddVector = [size=a.getDenseRowCount()](const real* lhs, const real* rhs, const real scalar, real* out) {
 			for (int i = 0; i < size; ++i) {
-				out[i] = std::fmaf(scalar, rhs[i], lhs[i]);
+				out[i] = std::fma(scalar, rhs[i], lhs[i]);
 			}
 		};
 
@@ -818,28 +822,42 @@ namespace SMM {
 
 		Vector ap(a.getDenseRowCount());
 
-		float rSquare = r * r;
+		real rSquare = r * r;
+		int iterations = 0;
 		do {
 			a.rMult(p, ap);
-			const float denom = ap* p;
+			const real denom = ap* p;
+#ifdef SMM_DEBUG_PRINT
+			std::cout << "i: " << iterations << std::endl;
+			std::cout << "r^2: " << rSquare << std::endl;
+			std::cout << "Ap.p: " << denom << std::endl;
+#endif
 			// Numerical instability will cause devision by zero (or something close to). The method must be restarted
 			if (eps > std::abs(denom)) {
 				return 1;
 			}
-			const float alpha = rSquare / (ap * p);
+			const real alpha = rSquare / (ap * p);
 			multAddVector(x, p, alpha, x);
 			multAddVector(r, ap, -alpha, r);
 			// Dot product r * r can be zero (or close to zero) only if r has length close to zero.
 			// But if the residual is close to zero, this means that we have found a solution
-			const float newRSquare = r * r;
+			const real newRSquare = r * r;
+#ifdef SMM_DEBUG_PRINT
+			std::cout << "alpha: " << alpha << std::endl;
+			std::cout << "new r^2: " << newRSquare << std::endl;
+#endif
 			if (eps > newRSquare) {
 				break;
 			}
-			const float beta = newRSquare / rSquare;
+			const real beta = newRSquare / rSquare;
+#ifdef SMM_DEBUG_PRINT
+			std::cout << "beta: " << beta << std::endl;
+			std::cout << "==================================================" << std::endl;
+#endif
 			multAddVector(r, p, beta, p);
 			rSquare = newRSquare;
-			maxIterations--;
-		} while (r.secondNorm() > eps && maxIterations> 0);
+			iterations++;
+		} while (r.secondNorm() > eps && iterations < maxIterations);
 
 		if (maxIterations <= 0) {
 			return 1;
@@ -929,7 +947,7 @@ namespace SMM {
 		int filerow = 0;
 		while (!file.eof()) {
 			int row, col;
-			float value;
+			real value;
 			file >> row >> col >> value;
 			if (file.fail()) {
 				return MatrixLoadStatus::FAILED_TO_PARSE_FILE;
@@ -967,7 +985,7 @@ namespace SMM {
 		for (int i = 0; i < rows; ++i) {
 			file.ignore(std::numeric_limits<std::streamsize>::max(), '{');
 			for (int j = 0; j < cols; ++j) {
-				float val;
+				real val;
 				file >> val;
 				if (file.fail()) {
 					return MatrixLoadStatus::FAILED_TO_PARSE_FILE;
