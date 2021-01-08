@@ -797,15 +797,17 @@ namespace SMM {
 	/// @param[in] b Right hand side for the system of equations
 	/// @param[in,out] x Initial condition, the result will be written here too 
 	/// @return 0 on success, != 0 on error
-	inline int BiCGSymmetric(const CSRMatrix& a, float* b, float* x) {
+	inline int BiCGSymmetric(const CSRMatrix& a, float* b, float* x, int maxIterations, float eps) {
+		maxIterations = std::min(maxIterations, a.getDenseRowCount());
+		if (maxIterations == -1) {
+			maxIterations = a.getDenseRowCount();
+		}
 		auto multAddVector = [size=a.getDenseRowCount()](const float* lhs, const float* rhs, const float scalar, float* out) {
 			for (int i = 0; i < size; ++i) {
 				out[i] = std::fmaf(scalar, rhs[i], lhs[i]);
 			}
 		};
 
-		const float eps = 1e-4;
-		int numIterations = 100;
 		Vector r(a.getDenseRowCount());
 		a.rMultSub(b, x, r);
 
@@ -836,10 +838,10 @@ namespace SMM {
 			const float beta = newRSquare / rSquare;
 			multAddVector(r, p, beta, p);
 			rSquare = newRSquare;
-			numIterations--;
-		} while (r.secondNorm() > eps && numIterations > 0);
+			maxIterations--;
+		} while (r.secondNorm() > eps && maxIterations> 0);
 
-		if (numIterations <= 0) {
+		if (maxIterations <= 0) {
 			return 1;
 		}
 		return 0;

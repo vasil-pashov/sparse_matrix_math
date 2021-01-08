@@ -410,14 +410,14 @@ TEST(BiCGSymmetric, SmallDenseMatrix) {
 	SMM::Vector b({1,2,3,4});
 	SMM::Vector x(4, 0);
 
-	EXPECT_FALSE(SMM::BiCGSymmetric(csr, b, x));
+	EXPECT_FALSE(SMM::BiCGSymmetric(csr, b, x, -1, 1e-4f));
 	float resRef[4] = { -5.57856, -5.62417, 6.40556, 11.9399 };
 	for (int i = 0; i < 4; ++i) {
 		EXPECT_NEAR(x[i], resRef[i], 1e-4);
 	}
 }
 
-TEST(BiCGSymmetric, SmallSparseMatrix) {
+TEST(BiCGSymmetric, sherman1_1000x1000) {
 	const std::string path = ASSET_PATH + std::string("sherman1.mtx");
 	SMM::TripletMatrix triplet;
 	const SMM::MatrixLoadStatus status = SMM::loadMatrix(path.c_str(), triplet);
@@ -428,13 +428,10 @@ TEST(BiCGSymmetric, SmallSparseMatrix) {
 		rhs[el.getRow()] += el.getValue();
 	}
 	
-	//SMM::Vector x({ -717498, 445573, -406665, 1.22856e+06, 2.13818e+06, 661631, -1.06227e+06, 698196, -1.15782e+06, 
-	//	-947528, 1.25668e+06, 2.12304e+06, 688342, 1.13986e+06, 1.30794e+06, 1.52486e+06, -1.01643e+06, -18130.2,
-	//	1.50428e+06, 113797, 2.30834e+06, 1.49342e+06, -926750, 1.96045e+06, 366501, 513419, -207739 });
 
-	SMM::Vector x(27, 0.0f);
 	SMM::CSRMatrix m(triplet);
-	ASSERT_EQ(SMM::BiCGSymmetric(m, rhs, x), 0);
+	SMM::Vector x(m.getDenseRowCount(), 0.0f);
+	EXPECT_EQ(SMM::BiCGSymmetric(m, rhs, x, 500, 1e-6f), 0);
 
 	for (const float el : x) {
 		EXPECT_NEAR(el, 1.0f, 1e-4);
