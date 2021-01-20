@@ -423,7 +423,7 @@ namespace SMM {
 						for (int colIdx = csr->start[row]; colIdx < csr->start[row + 1]; ++colIdx) {
 							const int col = csr->positions[colIdx];
 							const real val = csr->values[colIdx];
-							dot = std::fma(val, mult[col], dot);
+							dot = val * mult[col] + dot;
 						}
 						out[row] = op(lhs[row], dot);
 					}
@@ -443,7 +443,7 @@ namespace SMM {
 				for (int colIdx = start[row]; colIdx < start[row + 1]; ++colIdx) {
 					const int col = positions[colIdx];
 					const real val = values[colIdx];
-					dot = std::fma(val, mult[col], dot);
+					dot = val * mult[col] + dot;
 				}
 				out[row] = op(lhs[row], dot);
 			}
@@ -765,7 +765,7 @@ namespace SMM {
 			assert(other.size == size);
 			real dot = 0.0f;
 			for (int i = 0; i < size; ++i) {
-				dot = std::fma(data[i], other[i], dot);
+				dot = data[i] * other[i] + dot;
 			}
 			return dot;
 		}
@@ -807,7 +807,7 @@ namespace SMM {
 		}
 		auto multAddVector = [size=a.getDenseRowCount()](const real* lhs, const real* rhs, const real scalar, real* out) {
 			for (int i = 0; i < size; ++i) {
-				out[i] = std::fma(scalar, rhs[i], lhs[i]);
+				out[i] = scalar * rhs[i] + lhs[i];
 			}
 		};
 
