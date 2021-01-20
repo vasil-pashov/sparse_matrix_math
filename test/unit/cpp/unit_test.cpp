@@ -237,6 +237,7 @@ using CSMatrixRMultAdd = CSMatrixRMultOp<CSMatrix_t>;
 TYPED_TEST_SUITE(CSMatrixRMultAdd, CSMatrixTypes);
 
 TYPED_TEST(CSMatrixRMultAdd, EmptyMatrix) {
+	const int numRows = CSMatrixRMultOp<TypeParam>::numRows;
 	SMM::real mult[numRows] = { 1,2,3,4 };
 	SMM::real add[numRows] = { 5,6,7,8 };
 	const SMM::real resRef[numRows] = { 5,6,7,8 };
@@ -249,40 +250,44 @@ TYPED_TEST(CSMatrixRMultAdd, EmptyMatrix) {
 }
 
 TYPED_TEST(CSMatrixRMultAdd, AddMultZero) {
+	const int numRows = CSMatrixRMultOp<TypeParam>::numRows;
 	SMM::real mult[numRows] = {};
 	SMM::real add[numRows] = {};
 	const SMM::real resRef[numRows] = {};
-	m.rMultAdd(add, mult, add);
+	CSMatrixRMultOp<TypeParam>::m.rMultAdd(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}
 }
 
 TYPED_TEST(CSMatrixRMultAdd, AddZero) {
+	const int numRows = CSMatrixRMultOp<TypeParam>::numRows;
 	SMM::real mult[numRows] = { 1,2,3,4 };
 	SMM::real add[numRows] = {};
 	const SMM::real resRef[numRows] = { 14.1, 12.5, 12.4, 8.3 };
-	m.rMultAdd(add, mult, add);
+	CSMatrixRMultOp<TypeParam>::m.rMultAdd(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}
 }
 
 TYPED_TEST(CSMatrixRMultAdd, MultZero) {
+	const int numRows = CSMatrixRMultOp<TypeParam>::numRows;
 	SMM::real mult[numRows] = {};
 	SMM::real add[numRows] = { 5,6,7,8 };
 	const SMM::real resRef[numRows] = { 5,6,7,8 };
-	m.rMultAdd(add, mult, add);
+	CSMatrixRMultOp<TypeParam>::m.rMultAdd(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}
 }
 
 TYPED_TEST(CSMatrixRMultAdd, Basic) {
+	const int numRows = CSMatrixRMultOp<TypeParam>::numRows;
 	SMM::real mult[numRows] = { 1,0,3,4 };
 	SMM::real add[numRows] = { 5,6,7,8 };
 	const SMM::real resRef[numRows] = { 19.1, 12.7, 16., 15.5 };
-	m.rMultAdd(add, mult, add);
+	CSMatrixRMultOp<TypeParam>::m.rMultAdd(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}
@@ -295,6 +300,7 @@ using CSMatrixRMultSub = CSMatrixRMultOp<CSMatrix_t>;
 TYPED_TEST_SUITE(CSMatrixRMultSub, CSMatrixTypes);
 
 TYPED_TEST(CSMatrixRMultSub, EmptyMatrix) {
+	const int numRows = CSMatrixRMultSub<TypeParam>::numRows;
 	SMM::real mult[numRows] = { 1,2,3,4 };
 	SMM::real add[numRows] = { 5,6,7,8 };
 	const SMM::real resRef[numRows] = { 5,6,7,8 };
@@ -307,40 +313,44 @@ TYPED_TEST(CSMatrixRMultSub, EmptyMatrix) {
 }
 
 TYPED_TEST(CSMatrixRMultSub, SubMultZero) {
+	const int numRows = CSMatrixRMultSub<TypeParam>::numRows;
 	SMM::real mult[numRows] = {};
 	SMM::real add[numRows] = {};
 	const SMM::real resRef[numRows] = {};
-	m.rMultSub(add, mult, add);
+	CSMatrixRMultSub<TypeParam>::m.rMultSub(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}
 }
 
 TYPED_TEST(CSMatrixRMultSub, SubZero) {
+	const int numRows = CSMatrixRMultSub<TypeParam>::numRows;
 	SMM::real mult[numRows] = { 1,2,3,4 };
 	SMM::real add[numRows] = {};
 	const SMM::real resRef[numRows] = { -14.1, -12.5, -12.4, -8.3 };
-	m.rMultSub(add, mult, add);
+	CSMatrixRMultSub<TypeParam>::m.rMultSub(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}
 }
 
 TYPED_TEST(CSMatrixRMultSub, MultZero) {
+	const int numRows = CSMatrixRMultSub<TypeParam>::numRows;
 	SMM::real mult[numRows] = {};
 	SMM::real add[numRows] = { 5,6,7,8 };
 	const SMM::real resRef[numRows] = { 5,6,7,8 };
-	m.rMultSub(add, mult, add);
+	CSMatrixRMultSub<TypeParam>::m.rMultSub(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}
 }
 
 TYPED_TEST(CSMatrixRMultSub, Basic) {
+	const int numRows = CSMatrixRMultSub<TypeParam>::numRows;
 	SMM::real mult[numRows] = { 1,0,3,4 };
 	SMM::real add[numRows] = { 5,6,7,8 };
 	const SMM::real resRef[numRows] = { -9.1, -0.7, -2., 0.5 };
-	m.rMultSub(add, mult, add);
+	CSMatrixRMultSub<TypeParam>::m.rMultSub(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
 	}

@@ -269,7 +269,6 @@ namespace SMM {
 		using pointer = const CSRElement*;
 		using reference = const CSRElement&;
 
-		CSRConstIterator() = default;
 		CSRConstIterator(
 			const real* values,
 			const int* positions,
@@ -897,7 +896,7 @@ namespace SMM {
 
 		auto tolower = [](std::string& str) {
 			for (char& c : str) {
-				c = std::tolower(unsigned char(c));
+				c = std::tolower(static_cast<unsigned char>(c));
 			}
 		};
 
@@ -923,13 +922,13 @@ namespace SMM {
 		file >> type;
 		tolower(type);
 		if (type != "real" && type != "integer") {
-			MatrixLoadStatus::PARSE_ERROR_MMX_FILE_UNSUPPORTED_EL_TYPE;
+			return MatrixLoadStatus::PARSE_ERROR_MMX_FILE_UNSUPPORTED_EL_TYPE;
 		}
 
 		file >> structure;
 		tolower(structure);
 		if (structure != "symmetric") {
-			MatrixLoadStatus::PARSE_ERROR_MMX_FILE_UNSUPPORTED_STRUCTURE;
+			return MatrixLoadStatus::PARSE_ERROR_MMX_FILE_UNSUPPORTED_STRUCTURE;
 		}
 		
 		// Skip comment section
