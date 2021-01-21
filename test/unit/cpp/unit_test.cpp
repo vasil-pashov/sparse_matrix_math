@@ -34,6 +34,19 @@ namespace SMM {
 	}
 }
 
+template<typename T>
+constexpr T epsilon();
+
+template<>
+constexpr float epsilon<float>() {
+	return 1e-4;
+}
+
+template<>
+constexpr double epsilon<double>() {
+	return 1e-6;
+}
+
 TEST(TripletMatrixTest, ConstructorRowCol) {
 	const int numRows = 5;
 	const int numCols = 10;
@@ -423,10 +436,10 @@ protected:
 
 		SMM::CSRMatrix m(triplet);
 		SMM::Vector x(m.getDenseRowCount(), 0.0f);
-		EXPECT_EQ(SMM::BiCGSymmetric(m, rhs, x, -1, 1e-6f), 0);
-
+		SMM::SolverStatus solverStatus = SMM::BiCGSymmetric(m, rhs, x, -1, epsilon<SMM::real>());
+		EXPECT_EQ(solverStatus, SMM::SolverStatus::SUCCESS);
 		for (const SMM::real el : x) {
-			EXPECT_NEAR(el, 1.0f, 1e-4);
+			EXPECT_NEAR(el, 1.0f, epsilon<SMM::real>());
 		}
 	}
 };
@@ -452,10 +465,10 @@ TEST_F(BiCGSymmetric, SmallDenseMatrix) {
 	SMM::Vector b({1,2,3,4});
 	SMM::Vector x(4, 0);
 
-	EXPECT_FALSE(SMM::BiCGSymmetric(csr, b, x, -1, 1e-4f));
+	EXPECT_EQ(SMM::BiCGSymmetric(csr, b, x, -1, epsilon<SMM::real>()), SMM::SolverStatus::SUCCESS);
 	SMM::real resRef[4] = { -5.57856, -5.62417, 6.40556, 11.9399 };
 	for (int i = 0; i < 4; ++i) {
-		EXPECT_NEAR(x[i], resRef[i], 1e-4);
+		EXPECT_NEAR(x[i], resRef[i], epsilon<SMM::real>());
 	}
 }
 
@@ -471,6 +484,12 @@ TEST_F(BiCGSymmetric_PositiveDefinite, mesh1em1_structural_48_48_177) {
 
 TEST_F(BiCGSymmetric_PositiveDefinite, mesh1em6_structural_48_48_177) {
 	const std::string path = ASSET_PATH + std::string("mesh1em6_structural_48_48_177.mtx");
+	SumRowTest(path.c_str());
+}
+
+TEST_F(BiCGSymmetric_PositiveDefinite, sherman1_1000_1000_2375) {
+	GTEST_SKIP_("Skipping sherman1_1000_1000_2375 until better stop criteria is found.");
+	const std::string path = ASSET_PATH + std::string("sherman1_1000_1000_2375.mtx");
 	SumRowTest(path.c_str());
 }
 

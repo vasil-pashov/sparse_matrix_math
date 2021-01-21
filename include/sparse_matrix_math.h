@@ -795,21 +795,29 @@ namespace SMM {
 		int size;
 	};
 
+	enum class SolverStatus {
+		SUCCESS = 0,
+		DIVERGED,
+		MAX_ITERATIONS_REACHED
+	};
+
 	/// @brief solve a.x=b using BiConjugate gradient matrix, where matrix a is symmetric
 	/// @param[in] a Coefficient matrix for the system of equations
 	/// @param[in] b Right hand side for the system of equations
 	/// @param[in,out] x Initial condition, the result will be written here too 
-	/// @return 0 on success, != 0 on error
-	inline int BiCGSymmetric(const CSRMatrix& a, real* b, real* x, int maxIterations, real eps) {
+	/// @retval 0 on success, != 0 on error
+	inline SolverStatus BiCGSymmetric(
+		const CSRMatrix& a,
+		real* b,
+		real* x,
+		int maxIterations,
+		real eps
+	) {
+
 		maxIterations = std::min(maxIterations, a.getDenseRowCount());
 		if (maxIterations == -1) {
 			maxIterations = a.getDenseRowCount();
 		}
-		auto multAddVector = [size=a.getDenseRowCount()](const real* lhs, const real* rhs, const real scalar, real* out) {
-			for (int i = 0; i < size; ++i) {
-				out[i] = scalar * rhs[i] + lhs[i];
-			}
-		};
 
 		Vector r(a.getDenseRowCount());
 		a.rMultSub(b, x, r);
@@ -823,6 +831,7 @@ namespace SMM {
 
 		real rSquare = r * r;
 		int iterations = 0;
+		real maxInfNorm = real(0);
 		do {
 			a.rMult(p, ap);
 			const real denom = ap* p;
@@ -832,12 +841,21 @@ namespace SMM {
 			std::cout << "Ap.p: " << denom << std::endl;
 #endif
 			// Numerical instability will cause devision by zero (or something close to). The method must be restarted
-			if (eps > std::abs(denom)) {
-				return 1;
+			// For positive definite matrices if denom becomes 0 this is a lucky breakdown so we should not exit with error
+			// but continue iterating. However we cannot know in advance if the matrix is positive definite, thus a heuristic is used.
+			// If a system with positive definite matrix is solved, near the lucky breakdown the residual must be small, so it's length
+			// squared will be small too, so for rSquare and small denom we continue, if the rSquare is large we are most likely dealing
+			// with indefinite matrix and this is serious breakdown so we exit the procedure with error message.
+			if (eps > std::abs(denom) && rSquare > 1) {
+				return SolverStatus::DIVERGED;
 			}
-			const real alpha = rSquare / (ap * p);
-			multAddVector(x, p, alpha, x);
-			multAddVector(r, ap, -alpha, r);
+			const real alpha = rSquare / denom;
+			maxInfNorm = real(0);
+			for(int i = 0; i < a.getDenseRowCount(); ++i) {
+				x[i] += alpha * p[i];
+				r[i] -= alpha * ap[i];
+				maxInfNorm = std::max(abs(r[i]), maxInfNorm);
+			}
 			// Dot product r * r can be zero (or close to zero) only if r has length close to zero.
 			// But if the residual is close to zero, this means that we have found a solution
 			const real newRSquare = r * r;
@@ -845,23 +863,28 @@ namespace SMM {
 			std::cout << "alpha: " << alpha << std::endl;
 			std::cout << "new r^2: " << newRSquare << std::endl;
 #endif
-			if (eps > newRSquare) {
-				break;
+			// If rSquare is small it's expected next iteration residual to be small too
+			// Thus deleting large number by a small is highly unlikely here
+			// If rSquare is small and newRSquare is large, we have critical brakedown, which might happen with BiCG method
+			if(newRSquare > 1 && rSquare < eps) {
+				return SolverStatus::DIVERGED;
 			}
 			const real beta = newRSquare / rSquare;
 #ifdef SMM_DEBUG_PRINT
 			std::cout << "beta: " << beta << std::endl;
 			std::cout << "==================================================" << std::endl;
 #endif
-			multAddVector(r, p, beta, p);
+			for(int i = 0; i < a.getDenseRowCount(); ++i) {
+				p[i] = r[i] + beta * p[i];
+			}
 			rSquare = newRSquare;
 			iterations++;
-		} while (r.secondNorm() > eps && iterations < maxIterations);
+		} while ((maxInfNorm > eps || rSquare > eps * eps) && iterations < maxIterations);
 
-		if (maxIterations <= 0) {
-			return 1;
+		if (iterations > maxIterations) {
+			return SolverStatus::MAX_ITERATIONS_REACHED;
 		}
-		return 0;
+		return SolverStatus::SUCCESS;
 	}
 
 	enum class MatrixLoadStatus {
