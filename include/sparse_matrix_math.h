@@ -19,6 +19,18 @@ namespace SMM {
 #else
 	using real = float;
 #endif
+
+	namespace {
+		#define SMM_WITH_STD_FMA
+		constexpr inline real _smm_fma(real a, real x, real b) {
+			#ifdef SMM_WITH_STD_FMA
+				return std::fma(a, x, b);
+			#else
+				return a * x + b;
+			#endif
+		}
+	}
+
 	/// @brief Class to hold sparse matrix into triplet (coordinate) format.
 	/// Triplet format represents the matrix entries as list of triplets (row, col, value)
 	/// It is allowed repetition of elements, i.e. row and col can be the same for two
@@ -443,7 +455,7 @@ namespace SMM {
 				for (int colIdx = start[row]; colIdx < start[row + 1]; ++colIdx) {
 					const int col = positions[colIdx];
 					const real val = values[colIdx];
-					dot = val * mult[col] + dot;
+					dot = _smm_fma(val, mult[col], dot);
 				}
 				out[row] = op(lhs[row], dot);
 			}
@@ -765,7 +777,7 @@ namespace SMM {
 			assert(other.size == size);
 			real dot = 0.0f;
 			for (int i = 0; i < size; ++i) {
-				dot = data[i] * other[i] + dot;
+				dot += other[i] * data[i];
 			}
 			return dot;
 		}
@@ -801,11 +813,11 @@ namespace SMM {
 		MAX_ITERATIONS_REACHED
 	};
 
-	/// @brief solve a.x=b using BiConjugate gradient matrix, where matrix a is symmetric
+	/// @brief solve a.x=b using BiConjugate Gradient matrix, where matrix a is symmetric
 	/// @param[in] a Coefficient matrix for the system of equations
 	/// @param[in] b Right hand side for the system of equations
 	/// @param[in,out] x Initial condition, the result will be written here too 
-	/// @retval 0 on success, != 0 on error
+	/// @return SolverStatus the status the solved system
 	inline SolverStatus BiCGSymmetric(
 		const CSRMatrix& a,
 		real* b,
@@ -831,7 +843,7 @@ namespace SMM {
 
 		real rSquare = r * r;
 		int iterations = 0;
-		real maxInfNorm = real(0);
+		real infNorm = real(0);
 		do {
 			a.rMult(p, ap);
 			const real denom = ap* p;
@@ -850,11 +862,11 @@ namespace SMM {
 				return SolverStatus::DIVERGED;
 			}
 			const real alpha = rSquare / denom;
-			maxInfNorm = real(0);
+			infNorm = real(0);
 			for(int i = 0; i < a.getDenseRowCount(); ++i) {
 				x[i] += alpha * p[i];
 				r[i] -= alpha * ap[i];
-				maxInfNorm = std::max(abs(r[i]), maxInfNorm);
+				infNorm = std::max(abs(r[i]), infNorm);
 			}
 			// Dot product r * r can be zero (or close to zero) only if r has length close to zero.
 			// But if the residual is close to zero, this means that we have found a solution
@@ -879,7 +891,66 @@ namespace SMM {
 			}
 			rSquare = newRSquare;
 			iterations++;
-		} while ((maxInfNorm > eps || rSquare > eps * eps) && iterations < maxIterations);
+		} while ((infNorm > eps || rSquare > eps * eps) && iterations < maxIterations);
+
+		if (iterations > maxIterations) {
+			return SolverStatus::MAX_ITERATIONS_REACHED;
+		}
+		return SolverStatus::SUCCESS;
+	}
+
+	/// @brief solve a.x=b using BiConjugate Gradient Squared matrix
+	/// @param[in] a Coefficient matrix for the system of equations
+	/// @param[in] b Right hand side for the system of equations
+	/// @param[in,out] x Initial condition, the result will be written here too 
+	/// @return SolverStatus the status the solved system
+	SolverStatus BiCGSquared(const CSRMatrix& a, real* b, real* x, int maxIterations, real eps) {
+		maxIterations = std::min(maxIterations, a.getDenseRowCount());
+		if (maxIterations == -1) {
+			maxIterations = a.getDenseRowCount();
+		}
+
+		const int rows = a.getDenseRowCount();
+		Vector r(rows), r0(rows);
+		a.rMultSub(b, x, r);
+		
+		// Help vectors, as in Saad's book, the vectors in the polynomial reccursion are: q, p, r
+		// They can be expressed only in terms of themselves, the other vectors do same some computation
+		// of the use a lot of memory they can be removed.
+		Vector p(rows), u(rows), q(rows), alphaUQ(rows), ap(rows);
+		for(int i = 0; i < rows; ++i) {
+			p[i] = r[i];
+			u[i] = r[i];
+			r0[i] = r[i];
+		}
+
+		real rr0 = r * r0;
+		real infNorm = real(0);
+		int iterations = 0;
+		do {
+			a.rMult(p, ap);
+			const real denom = ap * r0;
+			// Must investigate if denom < eps is critical breakdown
+			const real alpha = rr0 / denom;
+			for(int i = 0; i < rows; ++i) {
+				q[i] = _smm_fma(-alpha, ap[i], u[i]);
+				alphaUQ[i] = alpha * (u[i] + q[i]);
+				x[i] = x[i] + alphaUQ[i];
+			}
+			a.rMultSub(r, alphaUQ, r);
+			const real newRR0 = r * r0;
+			// Must investigate if rr0 < eps is critical breakdown
+			const real beta = newRR0 / rr0;
+			
+			infNorm = real(0);
+			for(int i = 0; i < rows; ++i) {
+				u[i] = _smm_fma(beta, q[i], r[i]);
+				p[i] = _smm_fma(beta, _smm_fma(beta, p[i], q[i]), u[i]);
+				infNorm = std::max(abs(r[i]), infNorm);
+			}
+			rr0 = newRR0;
+			iterations++;
+		} while (infNorm > eps && iterations < maxIterations);
 
 		if (iterations > maxIterations) {
 			return SolverStatus::MAX_ITERATIONS_REACHED;
