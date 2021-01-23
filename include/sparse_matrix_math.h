@@ -21,8 +21,7 @@ namespace SMM {
 #endif
 
 	namespace {
-		#define SMM_WITH_STD_FMA
-		constexpr inline real _smm_fma(real a, real x, real b) {
+		const inline real _smm_fma(real a, real x, real b) {
 			#ifdef SMM_WITH_STD_FMA
 				return std::fma(a, x, b);
 			#else
@@ -435,7 +434,7 @@ namespace SMM {
 						for (int colIdx = csr->start[row]; colIdx < csr->start[row + 1]; ++colIdx) {
 							const int col = csr->positions[colIdx];
 							const real val = csr->values[colIdx];
-							dot = val * mult[col] + dot;
+							dot = _smm_fma(val, mult[col], dot);
 						}
 						out[row] = op(lhs[row], dot);
 					}
@@ -813,7 +812,7 @@ namespace SMM {
 		MAX_ITERATIONS_REACHED
 	};
 
-	/// @brief solve a.x=b using BiConjugate Gradient matrix, where matrix a is symmetric
+	/// @brief solve a.x=b using BiConjugate Gradient method, where matrix a is symmetric
 	/// @param[in] a Coefficient matrix for the system of equations
 	/// @param[in] b Right hand side for the system of equations
 	/// @param[in,out] x Initial condition, the result will be written here too 
@@ -899,7 +898,7 @@ namespace SMM {
 		return SolverStatus::SUCCESS;
 	}
 
-	/// @brief solve a.x=b using BiConjugate Gradient Squared matrix
+	/// @brief solve a.x=b using BiConjugate Gradient Squared method
 	/// @param[in] a Coefficient matrix for the system of equations
 	/// @param[in] b Right hand side for the system of equations
 	/// @param[in,out] x Initial condition, the result will be written here too 
@@ -951,6 +950,62 @@ namespace SMM {
 			rr0 = newRR0;
 			iterations++;
 		} while (infNorm > eps && iterations < maxIterations);
+
+		if (iterations > maxIterations) {
+			return SolverStatus::MAX_ITERATIONS_REACHED;
+		}
+		return SolverStatus::SUCCESS;
+	}
+
+	/// @brief solve a.x=b using BiConjugate Gradient Stabilized method
+	/// @param[in] a Coefficient matrix for the system of equations
+	/// @param[in] b Right hand side for the system of equations
+	/// @param[in,out] x Initial condition, the result will be written here too 
+	/// @return SolverStatus the status the solved system
+	SolverStatus BiCGStab(const CSRMatrix& a, real* b, real* x, int maxIterations, real eps) {
+		maxIterations = std::min(maxIterations, a.getDenseRowCount());
+		if (maxIterations == -1) {
+			maxIterations = a.getDenseRowCount();
+		}
+
+		const int rows = a.getDenseRowCount();
+		Vector r(rows), r0(rows), p(rows), ap(rows), s(rows), as(rows);
+		a.rMultSub(b, x, r);
+		
+		for(int i = 0; i < rows; ++i) {
+			r0[i] = r[i];
+			p[i] = r[i];
+		}
+
+		real norm = real(0);
+		int iterations = 0;
+		real rr0 = r * r0;
+		do {
+			a.rMult(p, ap);
+			real denom = ap * r0;
+			const real alpha = rr0 / denom;
+			for(int i = 0; i < rows; ++i) {
+				s[i] = _smm_fma(-alpha, ap[i], r[i]);
+			}
+			a.rMult(s, as);
+			denom = as * as;
+			// TODO: add proper check for division by zero
+			const real omega = (as * s) / denom;
+			norm = real(0);
+			for(int i = 0; i < rows; ++i) {
+				x[i] = _smm_fma(alpha, p[i], _smm_fma(omega, s[i], x[i])); 
+				r[i] = _smm_fma(-omega, as[i], s[i]); 
+				norm = std::max(abs(r[i]), norm);
+			}
+			const real newRR0 = r * r0;
+			// TODO: add proper check for division by zero
+			const real beta = (newRR0 * alpha) / (rr0 * omega);
+			for(int i = 0; i < rows; ++i) {
+				p[i] = _smm_fma(beta, (_smm_fma(-omega, ap[i], p[i])), r[i]);
+			}
+			rr0 = newRR0;
+			iterations++;
+		} while(norm > eps && iterations < maxIterations);
 
 		if (iterations > maxIterations) {
 			return SolverStatus::MAX_ITERATIONS_REACHED;
