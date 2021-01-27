@@ -30,6 +30,92 @@ namespace SMM {
 		}
 	}
 
+	class TripletEl {
+	friend class TripletMatrixConstIterator;
+	public:
+		TripletEl(const TripletEl&) noexcept = default;
+		TripletEl& operator=(const TripletEl& other) = default;
+
+		TripletEl(TripletEl&&) noexcept = default;
+		TripletEl& operator=(TripletEl&& other) = default;
+
+		const bool operator==(const TripletEl& other) const {
+			return it == other.it;
+		}
+
+		const int getRow() const noexcept {
+			return it->first >> 32;
+		}
+
+		const int getCol() const noexcept {
+			return it->first & 0x00FF;
+		}
+
+		const real getValue() const noexcept {
+			return it->second;
+		}
+
+		friend void swap(TripletEl& a, TripletEl& b) noexcept;
+	private:
+		TripletEl(std::map<uint64_t, real>::const_iterator it) : it(it) {
+
+		}
+
+		std::map<uint64_t, real>::const_iterator it;
+	};
+
+	void swap(TripletEl& a, TripletEl& b) noexcept {
+		using std::swap;
+		swap(a.it, b.it);
+	}
+	
+	class TripletMatrixConstIterator {
+	friend class TripletMatrix;
+	public:
+		using iterator_category = std::forward_iterator_tag;
+		using value_type = TripletEl;
+		using pointer = const TripletEl*;
+		using reference = const TripletEl&;
+
+		TripletMatrixConstIterator& operator=(const TripletMatrixConstIterator&) = default;
+
+		const bool operator==(const TripletMatrixConstIterator& other) const noexcept {
+			return currentEl == other.currentEl;
+		}
+
+		const bool operator!=(const TripletMatrixConstIterator& other) const noexcept {
+			return !(*this == other);
+		}
+
+		reference operator*() const {
+			return currentEl;
+		}
+
+		pointer operator->() const {
+			return &currentEl;
+		}
+
+		TripletMatrixConstIterator& operator++() noexcept {
+			++currentEl.it;
+			return *this;
+		}
+
+		TripletMatrixConstIterator operator++(int) noexcept {
+			TripletMatrixConstIterator initialState = *this;
+			++(*this);
+			return initialState;
+		}
+
+		friend void swap(TripletMatrixConstIterator& a, TripletMatrixConstIterator& b) noexcept;
+	private:
+		TripletMatrixConstIterator(std::map<uint64_t, real>::const_iterator it) : currentEl(it) {}
+		TripletEl currentEl;
+	};
+
+	void swap(TripletMatrixConstIterator& a, TripletMatrixConstIterator& b) noexcept {
+		swap(a.currentEl, b.currentEl);
+	}
+
 	/// @brief Class to hold sparse matrix into triplet (coordinate) format.
 	/// Triplet format represents the matrix entries as list of triplets (row, col, value)
 	/// It is allowed repetition of elements, i.e. row and col can be the same for two
@@ -38,32 +124,8 @@ namespace SMM {
 	/// entries dynamically. After all data is gathered it should be converted to CSRMatrix which provides
 	/// various arithmetic functions.
 	class TripletMatrix {
-	private:
-		class TripletEl {
-		public:
-			friend class TripletMatrix;
-			TripletEl(int row, int col, real value) noexcept :
-				row(row),
-				col(col),
-				value(value) {
-			}
-			TripletEl(const TripletEl&) noexcept = default;
-			TripletEl(TripletEl&&) noexcept = default;
-			const int getRow() const noexcept {
-				return row;
-			}
-			const int getCol() const noexcept {
-				return col;
-			}
-			const real getValue() const noexcept {
-				return value;
-			}
-		private:
-			int row, col;
-			real value;
-		};
 	public:
-		using ConstIterator = std::vector<TripletEl>::const_iterator;
+		using ConstIterator = TripletMatrixConstIterator;
 		TripletMatrix();
 		/// @brief Initialize triplet matrix with given number of rows and columns
 		/// The number of rows and columns does not have any affect the space allocated by the matrix
@@ -113,14 +175,10 @@ namespace SMM {
 		/// @return The column count which dense matrix is supposed to have (not only the stored ones)
 		const int getDenseColCount() const noexcept;
 	private:
-		/// @brief List of triplets. Array of structures is chosen since converting to
-		/// compressed sparse format requires iteration over all triplets and this format
-		/// is more cache friendly.
-		std::vector<TripletEl> data;
 		/// @brief Keep track of repeating indexes
 		/// Key is unique representation of the matrix index (first 32 bits are the col second are the row)
 		/// The value is index into the data array of triplets where the element is
-		std::map<uint64_t, int> entryIndex;
+		std::map<uint64_t, real> data;
 		int denseRowCount; ///< Number of rows in the matrix  
 		int denseColCount; ///< Number of columns in the matrix
 	};
@@ -138,22 +196,18 @@ namespace SMM {
 	TripletMatrix::TripletMatrix(int denseRowCount, int denseColCount, int numTriplets) noexcept :
 		denseRowCount(denseRowCount),
 		denseColCount(denseColCount)
-	{
-		data.reserve(numTriplets);
-	}
+	{ }
 
 	void TripletMatrix::init(const int denseRowCount, const int denseColCount, const int numTriplets) {
 		assert(getNonZeroCount() == 0 && getDenseRowCount() == 0 && getDenseColCount() == 0);
 		this->denseRowCount = denseRowCount;
 		this->denseColCount = denseColCount;
-		this->data.reserve(numTriplets);
 	}
 
 	void TripletMatrix::deinit() {
 		denseRowCount = 0;
 		denseColCount = 0;
 		data.clear();
-		data.shrink_to_fit();
 	}
 
 	void TripletMatrix::addEntry(int row, int col, real value) {
@@ -161,22 +215,20 @@ namespace SMM {
 		assert(row >= 0 && row < denseRowCount);
 		assert(col >= 0 && row < denseColCount);
 		const uint64_t key = (uint64_t(row) << 32) | uint64_t(col);
-		auto it = entryIndex.find(key);
-		if (it == entryIndex.end()) {
-			const int tripletIndex = data.size();
-			data.emplace_back(row, col, value);
-			entryIndex[key] = tripletIndex;
+		auto it = data.find(key);
+		if (it == data.end()) {
+			data[key] = value;
 		} else {
-			data[it->second].value += value;
+			data[key] += value;
 		}
 	}
 
 	inline TripletMatrix::ConstIterator TripletMatrix::begin() const noexcept {
-		return data.begin();
+		return ConstIterator(data.cbegin());
 	}
 
 	inline TripletMatrix::ConstIterator TripletMatrix::end() const noexcept {
-		return data.end();
+		return ConstIterator(data.cend());
 	}
 
 	inline const int TripletMatrix::getNonZeroCount() const noexcept {
