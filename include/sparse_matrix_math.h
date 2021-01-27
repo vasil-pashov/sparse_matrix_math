@@ -1,6 +1,6 @@
 #pragma once
 #include <vector>
-#include <unordered_map>
+#include <map>
 #include <memory>
 #include <cassert>
 #include <utility>
@@ -120,7 +120,7 @@ namespace SMM {
 		/// @brief Keep track of repeating indexes
 		/// Key is unique representation of the matrix index (first 32 bits are the col second are the row)
 		/// The value is index into the data array of triplets where the element is
-		std::unordered_map<uint64_t, int> entryIndex;
+		std::map<uint64_t, int> entryIndex;
 		int denseRowCount; ///< Number of rows in the matrix  
 		int denseColCount; ///< Number of columns in the matrix
 	};
