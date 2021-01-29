@@ -405,13 +405,18 @@ namespace SMM {
 	class CSRMatrix {
 	public:
 		using ConstIterator = CSRConstIterator;
+
 		CSRMatrix() noexcept;
 		CSRMatrix(const TripletMatrix& triplet) noexcept;
+
 		CSRMatrix(const CSRMatrix&) = delete;
 		CSRMatrix& operator=(const CSRMatrix&) = delete;
+
 		CSRMatrix(CSRMatrix&&) noexcept = default;
 		CSRMatrix& operator=(CSRMatrix&&) noexcept = default;
+
 		~CSRMatrix() = default;
+
 		const int init(const TripletMatrix& triplet) noexcept;
 		/// @brief Get the number of trivial nonzero entries in the matrix
 		/// Trivial nonzero entries do not include zero elements which came from numerical cancellation
@@ -423,10 +428,37 @@ namespace SMM {
 		/// @brief Get the total number of cols of the matrix
 		/// @return The column count which dense matrix is supposed to have (not only the stored ones)
 		const int getDenseColCount() const noexcept;
+		/// @brief Get constant iterator to the beggining of the matrix.
+		/// The iterator will start at the first non empty row and will finish at the last non empty row
+		/// The iterator is guaranteed to iterate over rows in increasing fashion
+		/// The iterator is invalidated after init is called, or the object is destructed. Uses of invalid iterators are undefined behavior
+		/// @returns Constant iterator to the beggining of the matrix
 		ConstIterator begin() const noexcept;
+		/// @brief Iterator to one element past the end of the matrix
+		/// It is undefined to dereference this iterator. Use it only in loop checks.
 		ConstIterator end() const noexcept;
+		/// @brief Perform matrix vector multiplication out = A * mult
+		/// Where A is the current CSR matrix
+		/// @param[in] mult The vector which will multiply the matrix to the right
+		/// @param[out] out Preallocated vector where the result is stored
+		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
+		///< Makes sense only of multithreading is enabaled.
 		void rMult(const real* const mult, real* const out, const bool async = false) const noexcept;
+		/// @brief Perform matrix vector multiplication and addition: out = lhs + A * mult
+		/// Where A is the current CSR matrix
+		/// @param[in] lhs The vector which will be added to the matrix vector product A * mult
+		/// @param[in] mult The vector which will multiply the matrix to the right
+		/// @param[out] out Preallocated vector where the result is stored
+		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
+		///< Makes sense only of multithreading is enabaled.
 		void rMultAdd(const real* const lhs, const real* const mult, real* const out, const bool async = false) const noexcept;
+		/// @brief Perform matrix vector multiplication and subtraction: out = lhs - A * mult
+		/// Where A is the current CSR matrix
+		/// @param[in] lhs The vector from which the matrix vector product A * mult will be subtracted
+		/// @param[in] mult The vector which will multiply the matrix to the right
+		/// @param[out] out Preallocated vector where the result is stored
+		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
+		///< Makes sense only of multithreading is enabaled.
 		void rMultSub(const real* const lhs, const real* const mult, real* const out, const bool async = false) const noexcept;
 	private:
 		/// Array which will hold all nonzero entries of the matrix.
@@ -443,8 +475,22 @@ namespace SMM {
 		/// Index in start array. If format is CSR the first row which has nonzero element in it
 		/// If format is CSC the first column which has nonzero element in it
 		int firstActiveStart;
+		/// Fill start, positions and values array. The arrays must be allocated with the right sizes before this is called.
 		const int fillArrays(const TripletMatrix& triplet) noexcept;
+		/// Get the next row which has at least one element in it
+		/// @param[in] currentStartIndex The current row
+		/// @param[in] startLength The length of the start array (same as the number of rows)
+		/// @returns The next non empty row
 		const int getNextStartIndex(int currentStartIndex, int startLength) const noexcept;
+		/// @brief Generic function to which will perfrom out = op(lhs, A * mult).
+		/// It is allowed out to be the same pointer as lhs.
+		/// @tparam FunctorType type for a functor implementing operator(real* lhs, real* rhs)
+		/// @param[in] lhs Left hand side operand.
+		/// @param[in] mult The vector which will multiply the matrix (to the right).
+		/// @param[out] out Preallocated vector where the result will be stored.
+		/// @param[in] op Functor which will execute op(lhs, A * mult) it must take in two real vectors.
+		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
+		///< Makes sense only of multithreading is enabaled.
 		template<typename FunctorType>
 		void rMultOp(
 			const real* const lhs,
@@ -452,66 +498,7 @@ namespace SMM {
 			real* const out,
 			const FunctorType& op,
 			const bool async
-		) const noexcept {
-#ifdef SMM_MULTITHREADING_CPPTM
-			struct rMultOpTask final : public CPPTM::ITask {
-				rMultOpTask(
-					const CSRMatrix* csr,
-					const real* const lhs,
-					const real* const mult,
-					real* const out,
-					const FunctorType& op
-				) :
-					csr(csr),
-					lhs(lhs),
-					mult(mult),
-					out(out),
-					op(op)
-				{ }
-
-				const CSRMatrix* csr;
-				const real* const lhs;
-				const real* const mult;
-				real* const out;
-				const FunctorType& op;
-
-				CPPTM::CPPTMStatus runTask(int blockIndex, int numBlocks) noexcept override {
-					const int rows = csr->getDenseRowCount();
-					const int blockSize = (rows + numBlocks) / numBlocks;
-					const int startIdx = blockSize * blockIndex;
-					const int end = std::min(rows, startIdx + blockSize);
-					const int start = startIdx == 0 ? csr->firstActiveStart : csr->getNextStartIndex(startIdx - 1, rows);
-					for (int row = start; row < end; row = csr->getNextStartIndex(row, rows)) {
-						real dot = 0.0f;
-						for (int colIdx = csr->start[row]; colIdx < csr->start[row + 1]; ++colIdx) {
-							const int col = csr->positions[colIdx];
-							const real val = csr->values[colIdx];
-							dot = _smm_fma(val, mult[col], dot);
-						}
-						out[row] = op(lhs[row], dot);
-					}
-					return CPPTM::CPPTMStatus::SUCCESS;
-				}
-			};
-			CPPTM::ThreadManager& globalTm = CPPTM::getGlobalTM();
-			if (async) {
-				globalTm.launchAsync(std::make_unique<rMultOpTask>(this, lhs, mult, out, op));
-			} else {
-				rMultOpTask task(this, lhs, mult, out, op);
-				globalTm.launchSync(&task);
-			}
-#else
-			for (int row = firstActiveStart; row < denseRowCount; row = getNextStartIndex(row, denseRowCount)) {
-				real dot = 0.0f;
-				for (int colIdx = start[row]; colIdx < start[row + 1]; ++colIdx) {
-					const int col = positions[colIdx];
-					const real val = values[colIdx];
-					dot = _smm_fma(val, mult[col], dot);
-				}
-				out[row] = op(lhs[row], dot);
-			}
-#endif
-		}
+		) const noexcept;
 	};
 
 	CSRMatrix::CSRMatrix() noexcept :
@@ -575,6 +562,74 @@ namespace SMM {
 
 	inline CSRMatrix::ConstIterator CSRMatrix::end() const noexcept {
 		return ConstIterator(values.get(), positions.get(), start.get(), denseRowCount, start[denseRowCount]);
+	}
+
+	template<typename FunctorType>
+	inline void CSRMatrix::rMultOp(
+		const real* const lhs,
+		const real* const mult,
+		real* const out,
+		const FunctorType& op,
+		const bool async
+	) const noexcept {
+#ifdef SMM_MULTITHREADING_CPPTM
+		struct rMultOpTask final : public CPPTM::ITask {
+			rMultOpTask(
+				const CSRMatrix* csr,
+				const real* const lhs,
+				const real* const mult,
+				real* const out,
+				const FunctorType& op
+			) :
+				csr(csr),
+				lhs(lhs),
+				mult(mult),
+				out(out),
+				op(op)
+			{ }
+
+			const CSRMatrix* csr;
+			const real* const lhs;
+			const real* const mult;
+			real* const out;
+			const FunctorType& op;
+
+			CPPTM::CPPTMStatus runTask(int blockIndex, int numBlocks) noexcept override {
+				const int rows = csr->getDenseRowCount();
+				const int blockSize = (rows + numBlocks) / numBlocks;
+				const int startIdx = blockSize * blockIndex;
+				const int end = std::min(rows, startIdx + blockSize);
+				const int start = startIdx == 0 ? csr->firstActiveStart : csr->getNextStartIndex(startIdx - 1, rows);
+				for (int row = start; row < end; row = csr->getNextStartIndex(row, rows)) {
+					real dot = 0.0f;
+					for (int colIdx = csr->start[row]; colIdx < csr->start[row + 1]; ++colIdx) {
+						const int col = csr->positions[colIdx];
+						const real val = csr->values[colIdx];
+						dot = _smm_fma(val, mult[col], dot);
+					}
+					out[row] = op(lhs[row], dot);
+				}
+				return CPPTM::CPPTMStatus::SUCCESS;
+			}
+		};
+		CPPTM::ThreadManager& globalTm = CPPTM::getGlobalTM();
+		if (async) {
+			globalTm.launchAsync(std::make_unique<rMultOpTask>(this, lhs, mult, out, op));
+		} else {
+			rMultOpTask task(this, lhs, mult, out, op);
+			globalTm.launchSync(&task);
+		}
+#else
+		for (int row = firstActiveStart; row < denseRowCount; row = getNextStartIndex(row, denseRowCount)) {
+			real dot = 0.0f;
+			for (int colIdx = start[row]; colIdx < start[row + 1]; ++colIdx) {
+				const int col = positions[colIdx];
+				const real val = values[colIdx];
+				dot = _smm_fma(val, mult[col], dot);
+			}
+			out[row] = op(lhs[row], dot);
+		}
+#endif
 	}
 
 	inline void CSRMatrix::rMult(const real* const mult, real* const res, const bool async) const noexcept {
