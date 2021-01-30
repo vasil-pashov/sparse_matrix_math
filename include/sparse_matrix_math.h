@@ -21,6 +21,7 @@ namespace SMM {
 #endif
 
 	namespace {
+		/// Perform a * x + b, based on compilerd defines this might use actual fused multiply add call
 		const inline real _smm_fma(real a, real x, real b) {
 			#ifdef SMM_WITH_STD_FMA
 				return std::fma(a, x, b);
@@ -399,6 +400,11 @@ namespace SMM {
 		swap(a.currentElement, b.currentElement);
 	}
 
+	enum class SolverPreconditioner {
+		NONE,
+		SYMMETRIC_GAUS_SEIDEL
+	};
+
 	/// @brief Base class for matrix in compressed sparse row format
 	/// Compressed sparse row format is represented with 3 arrays. One for the values,
 	/// one to keep track nonzero columns for each row, one to keep track where each row
@@ -460,6 +466,35 @@ namespace SMM {
 		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
 		///< Makes sense only of multithreading is enabaled.
 		void rMultSub(const real* const lhs, const real* const mult, real* const out, const bool async = false) const noexcept;
+	
+		/// Factory function to generate preconditioners for this matrix
+		/// @tparam precond Type of the preconditioner defined by the SolverPreconditioner enum
+		/// @returns Preconditioner which can be used for this matrix
+		template<SolverPreconditioner precond>
+		decltype(auto) getPreconditioner() const noexcept;
+
+		/// Identity preconditioner. Does nothing, but implements the interface
+		class IDPreconditioner {
+			int apply(const real* rhs, real* x) {
+				return 0;
+			}
+		};
+
+		/// Symmetric Gauss-Seidel Preconditioner.
+		class SGSPreconditioner {
+		public:
+			SGSPreconditioner(const CSRMatrix& m);
+			SGSPreconditioner(const SGSPreconditioner&) = delete;
+			SGSPreconditioner& operator=(const SGSPreconditioner&) = delete;
+			SGSPreconditioner(SGSPreconditioner&&) = default;
+			/// Apply the Symmetric Gauss-Seidel preconditioner to a vector
+			/// @param[in] rhs Vector which will be preconditioned
+			/// @param[out] x The result of preconditioning rhs
+			/// @retval Non zero on error
+			int apply(const real* rhs, real* x);
+		private:
+			const CSRMatrix& m;
+		};
 	private:
 		/// Array which will hold all nonzero entries of the matrix.
 		/// This is of length  number of nonzero entries
@@ -633,6 +668,7 @@ namespace SMM {
 	}
 
 	inline void CSRMatrix::rMult(const real* const mult, real* const res, const bool async) const noexcept {
+		assert(mult != res);
 		auto rhsId = [](const real lhs, const  real rhs) -> real {
 			return rhs;
 		};
@@ -691,6 +727,69 @@ namespace SMM {
 			positions[position] = el.getCol();
 			values[position] = el.getValue();
 			count[startIdx]--;
+		}
+		return 0;
+	}
+
+	template<SolverPreconditioner precond>
+	decltype(auto) CSRMatrix::getPreconditioner() const noexcept {
+		if constexpr (precond == SolverPreconditioner::NONE) {
+			return IDPreconditioner();
+		} else if constexpr (precond == SolverPreconditioner::SYMMETRIC_GAUS_SEIDEL) {
+			return SGSPreconditioner(*this);
+		}
+	}
+
+	inline int CSRMatrix::SGSPreconditioner::apply(const real* rhs, real* x) {
+		// The symmetric Gaus-Seidel comes in the form M = (D - L)D^-1(D - U)
+		// We want to find x=M^{-1}rhs, note however that (D - L) is lower triangular matrix
+		// D^-1(D - U) is upper trianguar matrix, thus it can be rewritten as Mx=rhs and solved in two
+		// steps (D - L)y = rhs, and then (I - D^{-1}U)x=y. 
+
+		// Assumes that the matrix has full structural rank. Thus there are no leading empty rows
+		assert(m.firstActiveStart == 0);
+		if(m.firstActiveStart != 0) {
+			return 1;
+		}
+
+		// 1. Forward substitution: (D - L)x=rhs
+		for(int row = 0; row < m.getDenseRowCount(); ++row) {
+			// The CSR matrix is sorted by increasing column indexes
+			int indexInRow = m.start[row];
+			const int nonZerosInRow = m.start[row + 1] - indexInRow;
+			assert(nonZerosInRow > 0);
+			if(nonZerosInRow == 0) {
+				return 1;
+			}
+			int col = m.positions[indexInRow];
+			real value = m.values[indexInRow];
+			real lhs = rhs[row];
+			while(col < row) {
+				lhs = _smm_fma(value, x[col], lhs);
+				++indexInRow;
+				col = m.positions[indexInRow];
+				value = m.values[indexInRow];
+			}
+			assert(col == row);
+			if(col != row || value < 1e-5) {
+				return 1;
+			}
+			x[row] = lhs / value;
+		}
+
+		for(int row = m.getDenseRowCount() - 1; row >= 0; --row) {
+			int indexInRow = m.start[row + 1] - 1;
+			int col = m.positions[indexInRow];
+			real value = m.values[indexInRow];
+			real lhs(0);
+			while(col > row) {
+				lhs = _smm_fma(value, x[col], lhs);
+				--indexInRow;
+				col = m.positions[indexInRow];
+				value = m.values[indexInRow];
+			}
+			assert(col == row);
+			x[row] += lhs / value;
 		}
 		return 0;
 	}
@@ -1010,7 +1109,7 @@ namespace SMM {
 	/// @param[in] b Right hand side for the system of equations
 	/// @param[in,out] x Initial condition, the result will be written here too 
 	/// @return SolverStatus the status the solved system
-	SolverStatus BiCGSquared(const CSRMatrix& a, real* b, real* x, int maxIterations, real eps) {
+	inline SolverStatus BiCGSquared(const CSRMatrix& a, real* b, real* x, int maxIterations, real eps) {
 		maxIterations = std::min(maxIterations, a.getDenseRowCount());
 		if (maxIterations == -1) {
 			maxIterations = a.getDenseRowCount();
@@ -1065,21 +1164,50 @@ namespace SMM {
 	}
 
 	/// @brief solve a.x=b using BiConjugate Gradient Stabilized method
+	/// @tparam Preconditioner Type of the preconditioner which will be applied to this matrix
 	/// @param[in] a Coefficient matrix for the system of equations
 	/// @param[in] b Right hand side for the system of equations
 	/// @param[in,out] x Initial condition, the result will be written here too 
+	/// @param[in] maxIterations Iterations threshold for the method.
+	///< If convergence was not reached for less than maxIterations the method will exit.
+	///< If maxIterations is -1 the method will do all possible iterations (the same as the number of rows in the matrix)
+	/// @param[in] eps Required size of the L2 norm of the residual
+	/// @param[in] precond Preconditioner class which will be applied to the current system
 	/// @return SolverStatus the status the solved system
-	SolverStatus BiCGStab(const CSRMatrix& a, real* b, real* x, int maxIterations, real eps) {
+	template<typename Preconditioner>
+	inline SolverStatus BiCGStab(
+		const CSRMatrix& a,
+		real* b,
+		real* x,
+		int maxIterations,
+		real eps,
+		const Preconditioner& preconditioner
+	) {
 		maxIterations = std::min(maxIterations, a.getDenseRowCount());
 		if (maxIterations == -1) {
 			maxIterations = a.getDenseRowCount();
 		}
 
 		const int rows = a.getDenseRowCount();
+		// This vector is allocated only if there is some preconditioner different than the identity
+		// It is used to store intermediate data needed by the preconditioner
+		Vector precondScratchpad;
+		constexpr bool precondition = !std::is_same<Preconditioner, decltype(a.getPreconditioner<SolverPreconditioner::NONE>())>::value;
+		if constexpr(precondition) {
+			precondScratchpad.init(rows);
+		}
+
 		Vector r(rows), r0(rows), p(rows), ap(rows), s(rows), as(rows);
 		a.rMultSub(b, x, r);
+
+		if constexpr(precondition) {
+			preconditioner.apply(r, precondScratchpad);
+		}
 		
 		for(int i = 0; i < rows; ++i) {
+			if constexpr(precondition) {
+				r[i] = precondScratchpad[i];
+			}
 			r0[i] = r[i];
 			p[i] = r[i];
 		}
@@ -1088,13 +1216,31 @@ namespace SMM {
 		int iterations = 0;
 		real rr0 = r * r0;
 		do {
-			a.rMult(p, ap);
+			if constexpr(precondition) {
+				a.rMult(p, precondScratchpad);
+				const int err = preconditioner.apply(precondScratchpad, ap);
+				// Assert that the preconditioner has completed successfully.
+				// TODO: Handle the case when it does not
+				assert(err == 0);
+			} else {
+				a.rMult(p, ap);
+			}
 			real denom = ap * r0;
 			const real alpha = rr0 / denom;
 			for(int i = 0; i < rows; ++i) {
 				s[i] = _smm_fma(-alpha, ap[i], r[i]);
 			}
-			a.rMult(s, as);
+
+			if constexpr(precondition) {
+				a.rMult(s, precondScratchpad);
+				const int err = preconditioner.apply(precondScratchpad, as);
+				// Assert that the preconditioner has completed successfully.
+				// TODO: Handle the case when it does not
+				assert(err == 0);
+			} else {
+				a.rMult(s, as);
+			}
+
 			denom = as * as;
 			// TODO: add proper check for division by zero
 			const real omega = (as * s) / denom;
@@ -1118,6 +1264,21 @@ namespace SMM {
 			return SolverStatus::MAX_ITERATIONS_REACHED;
 		}
 		return SolverStatus::SUCCESS;
+	}
+
+	/// @brief solve a.x=b using BiConjugate Gradient Stabilized method
+	/// @param[in] a Coefficient matrix for the system of equations
+	/// @param[in] b Right hand side for the system of equations
+	/// @param[in,out] x Initial condition, the result will be written here too 
+	/// @return SolverStatus the status the solved system
+	inline SolverStatus BiCGStab(
+		const CSRMatrix& a,
+		real* b,
+		real* x,
+		int maxIterations,
+		real eps
+	) {
+		return BiCGStab(a, b, x, maxIterations, eps, a.getPreconditioner<SolverPreconditioner::NONE>());
 	}
 
 	enum class MatrixLoadStatus {
