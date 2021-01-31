@@ -49,7 +49,7 @@ namespace SMM {
 		}
 
 		const int getCol() const noexcept {
-			return it->first & 0x00FF;
+			return it->first & 0xFFFFFFFF;
 		}
 
 		const real getValue() const noexcept {
@@ -466,16 +466,10 @@ namespace SMM {
 		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
 		///< Makes sense only of multithreading is enabaled.
 		void rMultSub(const real* const lhs, const real* const mult, real* const out, const bool async = false) const noexcept;
-	
-		/// Factory function to generate preconditioners for this matrix
-		/// @tparam precond Type of the preconditioner defined by the SolverPreconditioner enum
-		/// @returns Preconditioner which can be used for this matrix
-		template<SolverPreconditioner precond>
-		decltype(auto) getPreconditioner() const noexcept;
 
 		/// Identity preconditioner. Does nothing, but implements the interface
 		class IDPreconditioner {
-			int apply(const real* rhs, real* x) {
+			int apply(const real* rhs, real* x) const noexcept {
 				return 0;
 			}
 		};
@@ -483,32 +477,40 @@ namespace SMM {
 		/// Symmetric Gauss-Seidel Preconditioner.
 		class SGSPreconditioner {
 		public:
-			SGSPreconditioner(const CSRMatrix& m);
+			SGSPreconditioner(const CSRMatrix& m) noexcept;
 			SGSPreconditioner(const SGSPreconditioner&) = delete;
 			SGSPreconditioner& operator=(const SGSPreconditioner&) = delete;
-			SGSPreconditioner(SGSPreconditioner&&) = default;
+			SGSPreconditioner(SGSPreconditioner&&) noexcept = default;
 			/// Apply the Symmetric Gauss-Seidel preconditioner to a vector
 			/// @param[in] rhs Vector which will be preconditioned
 			/// @param[out] x The result of preconditioning rhs
 			/// @retval Non zero on error
-			int apply(const real* rhs, real* x);
+			const int apply(const real* rhs, real* x) const noexcept;
 		private:
 			const CSRMatrix& m;
 		};
+
+		/// Factory function to generate preconditioners for this matrix
+		/// @tparam precond Type of the preconditioner defined by the SolverPreconditioner enum
+		/// @returns Preconditioner which can be used for this matrix
+		template<SolverPreconditioner precond>
+		decltype(auto) getPreconditioner() const noexcept;
 	private:
 		/// Array which will hold all nonzero entries of the matrix.
-		/// This is of length  number of nonzero entries
+		/// This is of length  number of non-zero entries
 		std::unique_ptr<real[]> values;
-		/// If format is CSR this is the column if the i-th value
-		/// If format is CSC this is the row of the i-th value
+		/// This is the column of the i-th value
+		/// Sort the columns in increasing fasion. Some of the preconditioners rely on this.
+		/// Another reason for sorting is that it's more cache friendly when matrix vector multiplication is done
+		/// Do not expose publicly this property, users of this class should not rely that the columns are sorted
+		/// This is of length number of non-zero entries
 		std::unique_ptr<int[]> positions;
-		/// If format is CSR i-th element is index in positions and values where the i-th row starts
-		/// If format is CSC i-th element is index in positions and values where the i-th column starts
+		/// i-th element is index in positions and values where the i-th row starts
+		/// This is of length equal to the number of rows in the matrix
 		std::unique_ptr<int[]> start;
 		int denseRowCount; ///< Number of rows in the matrix
 		int denseColCount; ///< Number of columns in the matrix
-		/// Index in start array. If format is CSR the first row which has nonzero element in it
-		/// If format is CSC the first column which has nonzero element in it
+		/// Index in start array. The first row which has nonzero element in it.
 		int firstActiveStart;
 		/// Fill start, positions and values array. The arrays must be allocated with the right sizes before this is called.
 		const int fillArrays(const TripletMatrix& triplet) noexcept;
@@ -721,12 +723,14 @@ namespace SMM {
 		}
 
 		for (const auto& el : triplet) {
-			const int startIdx = el.getRow();
-			const int currentCount = count[startIdx];;
-			const int position = start[startIdx + 1] - currentCount;
+			const int row = el.getRow();
+			const int currentCount = count[row];
+			const int position = start[row + 1] - currentCount;
+			// Columns in each row are sorted in increasing order.
+			assert(position == start[row] || positions[position - 1] < el.getCol());
 			positions[position] = el.getCol();
 			values[position] = el.getValue();
-			count[startIdx]--;
+			count[row]--;
 		}
 		return 0;
 	}
@@ -740,19 +744,24 @@ namespace SMM {
 		}
 	}
 
-	inline int CSRMatrix::SGSPreconditioner::apply(const real* rhs, real* x) {
-		// The symmetric Gaus-Seidel comes in the form M = (D - L)D^-1(D - U)
-		// We want to find x=M^{-1}rhs, note however that (D - L) is lower triangular matrix
-		// D^-1(D - U) is upper trianguar matrix, thus it can be rewritten as Mx=rhs and solved in two
-		// steps (D - L)y = rhs, and then (I - D^{-1}U)x=y. 
+	inline CSRMatrix::SGSPreconditioner::SGSPreconditioner(const CSRMatrix& m) noexcept :
+		m(m)
+	{}
+
+	inline const int CSRMatrix::SGSPreconditioner::apply(const real* rhs, real* x) const noexcept {
+		// The symmetric Gaus-Seidel comes in the form M = (D + L)D^-1(D + U)
+		// We want to find x=M^{-1}rhs, note however that (D + L) is lower triangular matrix
+		// D^-1(D + U) is upper trianguar matrix, thus it can be rewritten as Mx=rhs and solved in two
+		// steps (D + L)y = rhs, and then (I - D^{-1}U)x=y. 
 
 		// Assumes that the matrix has full structural rank. Thus there are no leading empty rows
 		assert(m.firstActiveStart == 0);
+		assert(rhs != x);
 		if(m.firstActiveStart != 0) {
 			return 1;
 		}
 
-		// 1. Forward substitution: (D - L)x=rhs
+		// 1. Forward substitution: (D + L)x=rhs
 		for(int row = 0; row < m.getDenseRowCount(); ++row) {
 			// The CSR matrix is sorted by increasing column indexes
 			int indexInRow = m.start[row];
@@ -765,18 +774,19 @@ namespace SMM {
 			real value = m.values[indexInRow];
 			real lhs = rhs[row];
 			while(col < row) {
-				lhs = _smm_fma(value, x[col], lhs);
+				lhs = _smm_fma(-value, x[col], lhs);
 				++indexInRow;
 				col = m.positions[indexInRow];
 				value = m.values[indexInRow];
 			}
-			assert(col == row);
-			if(col != row || value < 1e-5) {
+			assert(col == row && std::abs(value) > 1e-5);
+			if(col != row || std::abs(value) < 1e-5) {
 				return 1;
 			}
 			x[row] = lhs / value;
 		}
 
+		// 2. Backsubstitution: (I + D^{-1}U)x=x, x will be computed inplace
 		for(int row = m.getDenseRowCount() - 1; row >= 0; --row) {
 			int indexInRow = m.start[row + 1] - 1;
 			int col = m.positions[indexInRow];
@@ -789,7 +799,7 @@ namespace SMM {
 				value = m.values[indexInRow];
 			}
 			assert(col == row);
-			x[row] += lhs / value;
+			x[row] = x[row] - lhs / value;
 		}
 		return 0;
 	}
@@ -1212,7 +1222,7 @@ namespace SMM {
 			p[i] = r[i];
 		}
 
-		real norm = real(0);
+		real resL2Norm = real(0);
 		int iterations = 0;
 		real rr0 = r * r0;
 		do {
@@ -1225,6 +1235,7 @@ namespace SMM {
 			} else {
 				a.rMult(p, ap);
 			}
+
 			real denom = ap * r0;
 			const real alpha = rr0 / denom;
 			for(int i = 0; i < rows; ++i) {
@@ -1244,12 +1255,13 @@ namespace SMM {
 			denom = as * as;
 			// TODO: add proper check for division by zero
 			const real omega = (as * s) / denom;
-			norm = real(0);
+			resL2Norm = real(0);
 			for(int i = 0; i < rows; ++i) {
 				x[i] = _smm_fma(alpha, p[i], _smm_fma(omega, s[i], x[i])); 
 				r[i] = _smm_fma(-omega, as[i], s[i]); 
-				norm = std::max(abs(r[i]), norm);
+				resL2Norm += r[i] * r[i];
 			}
+			resL2Norm = std::sqrt(resL2Norm);
 			const real newRR0 = r * r0;
 			// TODO: add proper check for division by zero
 			const real beta = (newRR0 * alpha) / (rr0 * omega);
@@ -1258,7 +1270,7 @@ namespace SMM {
 			}
 			rr0 = newRR0;
 			iterations++;
-		} while(norm > eps && iterations < maxIterations);
+		} while(resL2Norm > eps && iterations < maxIterations);
 
 		if (iterations > maxIterations) {
 			return SolverStatus::MAX_ITERATIONS_REACHED;

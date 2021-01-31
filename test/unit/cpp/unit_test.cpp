@@ -34,8 +34,12 @@ namespace SMM {
 	}
 }
 
-static constexpr inline SMM::real epsilon() {
-	return 1e-4;
+static constexpr inline SMM::real L2Epsilon() {
+	return SMM::real(1e-6);
+}
+
+static constexpr inline SMM::real MaxInfEpsilon() {
+	return SMM::real(1e-4);
 }
 
 TEST(TripletMatrixTest, ConstructorRowCol) {
@@ -410,7 +414,6 @@ TEST(CSRMatrixTest, CSRMatrixConstForwardIterator) {
 // =========================================================================
 // ============================== BiCGSymmetric ============================
 // =========================================================================
-
 class SolverTest : public ::testing::Test {
 protected:
 	virtual SMM::SolverStatus solve(const SMM::CSRMatrix& a, SMM::real* b, SMM::real* x, int maxIterations, SMM::real eps)  = 0;
@@ -428,13 +431,13 @@ protected:
 
 		SMM::CSRMatrix m(triplet);
 		SMM::Vector x(m.getDenseRowCount(), 0.0f);
-		SMM::SolverStatus solverStatus = solve(m, rhs, x, -1, epsilon());
+		SMM::SolverStatus solverStatus = solve(m, rhs, x, -1, L2Epsilon());
 		EXPECT_EQ(solverStatus, SMM::SolverStatus::SUCCESS);
 		SMM::real error = 0.0f;
 		for (const SMM::real el : x) {
 			error = std::max(abs(1 - el), error);
 		}
-		EXPECT_LE(error, epsilon());
+		EXPECT_LE(error, MaxInfEpsilon());
 	}
 };
 
@@ -465,10 +468,10 @@ TEST_F(BiCGSymmetric, SmallDenseMatrix) {
 	SMM::Vector b({1,2,3,4});
 	SMM::Vector x(4, 0);
 
-	EXPECT_EQ(SMM::BiCGSymmetric(csr, b, x, -1, epsilon()), SMM::SolverStatus::SUCCESS);
+	EXPECT_EQ(SMM::BiCGSymmetric(csr, b, x, -1, L2Epsilon()), SMM::SolverStatus::SUCCESS);
 	SMM::real resRef[4] = { -5.57856, -5.62417, 6.40556, 11.9399 };
 	for (int i = 0; i < 4; ++i) {
-		EXPECT_NEAR(x[i], resRef[i], epsilon());
+		EXPECT_NEAR(x[i], resRef[i], MaxInfEpsilon());
 	}
 }
 
@@ -488,7 +491,6 @@ TEST_F(BiCGSymmetric_PositiveDefinite, mesh1em6_structural_48_48_177) {
 }
 
 TEST_F(BiCGSymmetric_PositiveDefinite, sherman1_1000_1000_2375) {
-	GTEST_SKIP_("Skipping sherman1_1000_1000_2375 until better stop criteria is found.");
 	const std::string path = ASSET_PATH + std::string("sherman1_1000_1000_2375.mtx");
 	SumRowTest(path.c_str());
 }
@@ -526,10 +528,10 @@ TEST_F(BiCGSquared, SmallDenseMatrix) {
 	SMM::Vector b({1,2,3,4});
 	SMM::Vector x(4, 0);
 
-	EXPECT_EQ(solve(csr, b, x, -1, epsilon()), SMM::SolverStatus::SUCCESS);
+	EXPECT_EQ(solve(csr, b, x, -1, L2Epsilon()), SMM::SolverStatus::SUCCESS);
 	SMM::real resRef[4] = { -5.57856, -5.62417, 6.40556, 11.9399 };
 	for (int i = 0; i < 4; ++i) {
-		EXPECT_NEAR(x[i], resRef[i], epsilon());
+		EXPECT_NEAR(x[i], resRef[i], MaxInfEpsilon());
 	}
 }
 
@@ -549,7 +551,7 @@ TEST_F(BiCGSquared_PositiveDefinite, mesh1em6_structural_48_48_177) {
 }
 
 TEST_F(BiCGSquared_PositiveDefinite, sherman1_1000_1000_2375) {
-	GTEST_SKIP_("Skipping sherman1_1000_1000_2375 until better stop criteria is found.");
+	GTEST_SKIP_("The numerical instability of the method is clearly seen here. Using fma helps a little, but not ehough.");
 	const std::string path = ASSET_PATH + std::string("sherman1_1000_1000_2375.mtx");
 	SumRowTest(path.c_str());
 }
@@ -587,10 +589,10 @@ TEST_F(BiCGStab, SmallDenseMatrix) {
 	SMM::Vector b({1,2,3,4});
 	SMM::Vector x(4, 0);
 
-	EXPECT_EQ(solve(csr, b, x, -1, epsilon()), SMM::SolverStatus::SUCCESS);
+	EXPECT_EQ(solve(csr, b, x, -1, L2Epsilon()), SMM::SolverStatus::SUCCESS);
 	SMM::real resRef[4] = { -5.57856, -5.62417, 6.40556, 11.9399 };
 	for (int i = 0; i < 4; ++i) {
-		EXPECT_NEAR(x[i], resRef[i], epsilon());
+		EXPECT_NEAR(x[i], resRef[i], MaxInfEpsilon());
 	}
 }
 
@@ -610,11 +612,46 @@ TEST_F(BiCGStab_PositiveDefinite, mesh1em6_structural_48_48_177) {
 }
 
 TEST_F(BiCGStab_PositiveDefinite, sherman1_1000_1000_2375) {
-	GTEST_SKIP_("Skipping sherman1_1000_1000_2375 until better stop criteria is found.");
+	GTEST_SKIP_("The numerical instability of the method is clearly seen here. Using fma helps a little, but not ehough.");
 	const std::string path = ASSET_PATH + std::string("sherman1_1000_1000_2375.mtx");
 	SumRowTest(path.c_str());
 }
 
+// ============================== SGS ======================================
+class BiCGStabSGS : public SolverTest {
+protected:
+	SMM::SolverStatus solve(const SMM::CSRMatrix& a, SMM::real* b, SMM::real* x, int maxIterations, SMM::real eps) override {
+		return SMM::BiCGStab(a, b, x, maxIterations, eps, a.getPreconditioner<SMM::SolverPreconditioner::SYMMETRIC_GAUS_SEIDEL>());
+	}
+};
+
+class BiCGStabSGS_PositiveDefinite : public BiCGStabSGS {
+
+};
+
+class BiCGStabSGS_Indefinite : public BiCGStabSGS {
+
+};
+
+TEST_F(BiCGStabSGS_PositiveDefinite, mesh1e1_structural_48_48_177) {
+	const std::string path = ASSET_PATH + std::string("mesh1e1_structural_48_48_177.mtx");
+	SumRowTest(path.c_str());
+}
+
+TEST_F(BiCGStabSGS_PositiveDefinite, mesh1em1_structural_48_48_177) {
+	const std::string path = ASSET_PATH + std::string("mesh1em1_structural_48_48_177.mtx");
+	SumRowTest(path.c_str());
+}
+
+TEST_F(BiCGStabSGS_PositiveDefinite, mesh1em6_structural_48_48_177) {
+	const std::string path = ASSET_PATH + std::string("mesh1em6_structural_48_48_177.mtx");
+	SumRowTest(path.c_str());
+}
+
+TEST_F(BiCGStabSGS_PositiveDefinite, sherman1_1000_1000_2375) {
+	const std::string path = ASSET_PATH + std::string("sherman1_1000_1000_2375.mtx");
+	SumRowTest(path.c_str());
+}
 
 // =========================================================================
 // ============================== FILE LOAD ================================
