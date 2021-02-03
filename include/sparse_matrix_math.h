@@ -14,6 +14,12 @@
 #endif // SMM_MULTITHREADING_CPPTM
 
 namespace SMM {
+
+	#define SMM
+	#define SMM_MAJOR_VERSION 0
+	#define SMM_MINOR_VERSION 1
+	#define SMM_PATCH_VERSION 0
+
 #ifdef SMM_DEBUG_DOUBLE
 	using real = double;
 #else
