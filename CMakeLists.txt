@@ -17,7 +17,8 @@ add_library(${PROJECT_NAME} INTERFACE ./include/sparse_matrix_math.h)
 target_include_directories(${PROJECT_NAME} INTERFACE ./include)
 
 if("${SMM_MULTITHREADING}" STREQUAL "CPPTM")
-	target_link_libraries(${PROJECT_NAME} INTERFACE cpp_tm)
+	find_package(cpp_tm REQUIRED CONFIG)
+	target_link_libraries(${PROJECT_NAME} INTERFACE cpp_tm::cpp_tm)
 	target_compile_definitions(${PROJECT_NAME} INTERFACE SMM_MULTITHREADING_CPPTM)
 endif()
 
