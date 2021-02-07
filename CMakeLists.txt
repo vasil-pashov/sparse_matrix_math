@@ -1,9 +1,12 @@
+cmake_minimum_required(VERSION 3.19.0)
 project(
 	sparse_matrix_math
-	VERSION 0.0.1
+	VERSION 0.1.0
 	DESCRIPTION "Library for sparse matrices" 
 )
-cmake_minimum_required(VERSION 3.19.0)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(SMM_MULTITHREADING "None" CACHE STRING "Which library to use for multuthreading.")
 set_property(CACHE SMM_MULTITHREADING PROPERTY STRINGS None CPPTM)
