@@ -12,7 +12,7 @@
 #include <cstring>
 
 #ifdef SMM_MULTITHREADING_CPPTM
-#include <cpp_tm.h>
+#include <cpp_tm/cpp_tm.h>
 #endif // SMM_MULTITHREADING_CPPTM
 
 #define SMM_MAJOR_VERSION 0
