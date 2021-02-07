@@ -8,17 +8,18 @@
 #include <cmath>
 #include <fstream>
 #include <cctype>
+#include <iomanip>
+#include <cstring>
 
 #ifdef SMM_MULTITHREADING_CPPTM
 #include <cpp_tm.h>
 #endif // SMM_MULTITHREADING_CPPTM
 
-namespace SMM {
+#define SMM_MAJOR_VERSION 0
+#define SMM_MINOR_VERSION 1
+#define SMM_PATCH_VERSION 0
 
-	#define SMM
-	#define SMM_MAJOR_VERSION 0
-	#define SMM_MINOR_VERSION 1
-	#define SMM_PATCH_VERSION 0
+namespace SMM {
 
 #ifdef SMM_DEBUG_DOUBLE
 	using real = double;
@@ -1087,7 +1088,7 @@ namespace SMM {
 			for(int i = 0; i < a.getDenseRowCount(); ++i) {
 				x[i] += alpha * p[i];
 				r[i] -= alpha * ap[i];
-				infNorm = std::max(abs(r[i]), infNorm);
+				infNorm = std::max(std::abs(r[i]), infNorm);
 			}
 			// Dot product r * r can be zero (or close to zero) only if r has length close to zero.
 			// But if the residual is close to zero, this means that we have found a solution
@@ -1167,7 +1168,7 @@ namespace SMM {
 			for(int i = 0; i < rows; ++i) {
 				u[i] = _smm_fma(beta, q[i], r[i]);
 				p[i] = _smm_fma(beta, _smm_fma(beta, p[i], q[i]), u[i]);
-				infNorm = std::max(abs(r[i]), infNorm);
+				infNorm = std::max(std::abs(r[i]), infNorm);
 			}
 			rr0 = newRR0;
 			iterations++;
