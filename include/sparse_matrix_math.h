@@ -10,6 +10,7 @@
 #include <cctype>
 #include <iomanip>
 #include <cstring>
+#include <algorithm>
 
 #ifdef SMM_MULTITHREADING_CPPTM
 #include <cpp_tm/cpp_tm.h>
@@ -409,7 +410,8 @@ namespace SMM {
 
 	enum class SolverPreconditioner {
 		NONE,
-		SYMMETRIC_GAUS_SEIDEL
+		SYMMETRIC_GAUS_SEIDEL,
+		ILU0
 	};
 
 	/// @brief Base class for matrix in compressed sparse row format
@@ -495,6 +497,32 @@ namespace SMM {
 			const int apply(const real* rhs, real* x) const noexcept;
 		private:
 			const CSRMatrix& m;
+		};
+
+		/// Zero fill in Incomplete LU Factorization
+		class ILU0Preconditioner {
+		public:
+			ILU0Preconditioner(const CSRMatrix& m) noexcept;
+			ILU0Preconditioner(const ILU0Preconditioner&) = delete;
+			ILU0Preconditioner& operator=(const ILU0Preconditioner&) = delete;
+			ILU0Preconditioner(ILU0Preconditioner&&) noexcept = default;
+			/// Apply the Symmetric Gauss-Seidel preconditioner to a vector
+			/// @param[in] rhs Vector which will be preconditioned
+			/// @param[out] x The result of preconditioning rhs
+			/// @retval Non zero on error
+			const int apply(const real* rhs, real* x) const noexcept;
+			const int validate() noexcept;
+		private:
+			/// Uses the reference to the original matrix m in order to create the LU facroization
+			/// The values for both L and U will be written in ilo0Val array, the ones whic usually
+			/// appear on the main diagonal of L (or U) will not be written, we must keep in mind that they are there tough.
+			int factorize() noexcept;
+			/// Reference to the matrix for which this decomposition is made
+			/// For this factorization the resulting matrix will have the same non zero pattern as the original matrix,
+			/// Thus we will reuse the two arrays start and positions from the original matrix and allocate space only for the values
+			const CSRMatrix& m;
+			/// The values array for the ILU0 preconditioner
+			std::unique_ptr<real[]> ilu0Val;
 		};
 
 		/// Factory function to generate preconditioners for this matrix
@@ -811,6 +839,80 @@ namespace SMM {
 		return 0;
 	}
 
+	inline CSRMatrix::ILU0Preconditioner::ILU0Preconditioner(const CSRMatrix& m) noexcept : 
+		m(m),
+		ilu0Val(std::make_unique<real[]>(m.getNonZeroCount()))
+	{	}
+
+	inline const int CSRMatrix::ILU0Preconditioner::validate() noexcept {
+		return factorize();
+	}
+
+	inline int CSRMatrix::ILU0Preconditioner::factorize() noexcept {
+		// L and U will have the same non zero pattern as the lower and upper triangular parts of m
+		// The decompozition will take the form m = L * U + R, where we shall take only L and U and 
+		// m - L * U will be zero for all non zero elements of m, but m - L * U might have some non zero
+		// elements in places where m had zeros.
+
+		const int rows = m.getDenseRowCount();
+		const int cols = m.getDenseColCount();
+		assert(rows == cols);
+		memcpy(ilu0Val.get(), m.values.get(), sizeof(real) * m.getNonZeroCount());
+		assert(m.firstActiveStart == 0 && "The matrix does not have full rank");
+		if(m.firstActiveStart != 0) {
+			return 1;
+		}
+		// TODO [ILU0 Reordering]: Currently we assume that the ILU(0) factorization exists, for the current matrix as it is
+		// However for some matrices reordering might be needed, this is not handled for now.
+		assert(m.positions[0] == 0 && "The matrix has zero on the main diagonal. Reordering is needed.");
+		if(m.positions[0] == 0) {
+			return 2;
+		}
+		// This is used in the most inner loop of the following factorization, columnIndex[i] will be the index in m.positions of the i-th
+		// column in a row or -1 if the column is zero. This will be used to track the columns in the most outer loop in the factorization.
+		Vector columnIndex(cols, -1);
+		// TODO [Move Diagonal To End]: This can be avoided if the diagonal elements are kept in a fixed position in each row
+		// For example keep the diagonal element in the end of the row.
+		Vector diagonalElementsInv(rows);
+		diagonalElementsInv[0] = real(1) / m.values[0];
+		// The algorithm assumes that the columns in each row are sorted in increasing order
+		// U will have explicit main diagonal, L will have implicit main diagonal filled with 1
+		// The first row is trivial to compute, as u_{i,j} = m_{i,j} / l_{i,j}, but l_{i,j} = 1
+		for(int row = 1; row < rows; ++row) {
+			const int rowStart = m.start[row];
+			const int rowEnd = m.start[row + 1];
+			// Save the indexes for each non zero column in the row
+			for(int i = rowStart; i < rowEnd; ++i) {
+				const int column = m.positions[i];
+				columnIndex[column] = i;
+			}
+			int kPos = rowStart;
+			int k = m.positions[kPos];
+			for(; k < row; k = m.positions[++kPos]) {
+				const real alphaIK = ilu0Val[kPos] * diagonalElementsInv[k];
+				ilu0Val[kPos] = alphaIK;
+				for(int colPos = m.start[k + 1] - 1, col = m.positions[colPos]; col > 0; col = m.positions[--colPos]) {
+					const real betaKJ = ilu0Val[colPos];
+					if(columnIndex[col] != -1) {
+						ilu0Val[columnIndex[col]] -= alphaIK * betaKJ;
+					}
+				}
+			}
+			assert(k == row && ilu0Val[kPos] > 1e-6f && "Zero in pivot position!");
+			if(k == row && ilu0Val[kPos] > 1e-6f) {
+				return 2;
+			}
+			diagonalElementsInv[k] = real(1) / ilu0Val[kPos];
+			// Clear the column indexes and prepare them for the next iterations
+			for(int i = rowStart; i < rowEnd; ++i) {
+				const int column = m.positions[i];
+				columnIndex[column] = -1;
+			}
+		}
+
+		return 0;
+	}
+
 	inline void saveDenseText(const char* filepath, const CSRMatrix& m) {
 		std::ofstream file(filepath);
 		if (!file.is_open()) {
@@ -1010,6 +1112,14 @@ namespace SMM {
 
 		real* const end() noexcept {
 			return data + size;
+		}
+
+		void fill(const real value) {
+			if(value == 0.0f) {
+				memset(data, 0, sizeof(real) * size);
+			} else {
+				std::fill_n(data, size, value);
+			}
 		}
 
 	private:
