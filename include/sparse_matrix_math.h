@@ -39,6 +39,153 @@ namespace SMM {
 		}
 	}
 
+		class Vector {
+	public:
+		Vector() noexcept :
+			size(0),
+			data(nullptr)
+		{ }
+
+		Vector(const int size) noexcept :
+			size(size),
+			data(static_cast<real*>(malloc(size * sizeof(real))))
+		{ }
+
+		Vector(const int size, const real val) noexcept :
+			size(size)
+		{
+			initDataWithVal(val);
+		}
+
+		Vector(const std::initializer_list<real>& l) :
+			size(l.size()),
+			data(static_cast<real*>(malloc(l.size() * sizeof(real))))
+		{
+			std::copy(l.begin(), l.end(), data);
+		}
+
+		Vector(Vector&& other) noexcept :
+			size(other.size) {
+			free(data);
+			data = other.data;
+			other.data = nullptr;
+			other.size = 0;
+		}
+
+		Vector& operator=(Vector&& other) noexcept {
+			size = other.size;
+			free(data);
+			data = other.data;
+			other.data = nullptr;
+			other.size = 0;
+			return *this;
+		}
+
+		Vector(const Vector&) = delete;
+		Vector& operator=(const Vector&) = delete;
+
+		~Vector() {
+			free(data);
+			data = nullptr;
+			size = 0;
+		}
+
+		void init(const int size) {
+			assert(this->size == 0 && data == nullptr);
+			this->size = size;
+			data = static_cast<real*>(malloc(size * sizeof(real)));
+		}
+
+		void init(const int size, const real val) {
+			assert(this->size == 0 && data == nullptr);
+			this->size = size;
+			initDataWithVal(val);
+		}
+
+		const int getSize() const {
+			return this->size;
+		}
+
+		operator real* const() {
+			return data;
+		}
+
+		const real operator[](const int index) const {
+			assert(index < size);
+			return data[index];
+		}
+
+		real& operator[](const int index) {
+			assert(index < size);
+			return data[index];
+		}
+
+		Vector& operator+=(const Vector& other) {
+			assert(other.size == size);
+			for (int i = 0; i < size; ++i) {
+				data[i] += other[i];
+			}
+			return *this;
+		}
+
+		Vector& operator-=(const Vector& other) {
+			assert(other.size == size);
+			for (int i = 0; i < size; ++i) {
+				data[i] -= other[i];
+			}
+			return *this;
+		}
+
+		const real secondNorm() const {
+			real sum = 0.0f;
+			for (int i = 0; i < size; ++i) {
+				sum += data[i] * data[i];
+			}
+			return std::sqrt(sum);
+		}
+
+		const real operator*(const Vector& other) const {
+			assert(other.size == size);
+			real dot = 0.0f;
+			for (int i = 0; i < size; ++i) {
+				dot += other[i] * data[i];
+			}
+			return dot;
+		}
+
+		real* const begin() noexcept {
+			return data;
+		}
+
+		real* const end() noexcept {
+			return data + size;
+		}
+
+		void fill(const real value) {
+			if(value == 0.0f) {
+				memset(data, 0, sizeof(real) * size);
+			} else {
+				std::fill_n(data, size, value);
+			}
+		}
+
+	private:
+		void initDataWithVal(const real val) {
+			if (val == 0.0f) {
+				data = static_cast<real*>(calloc(size, sizeof(real)));
+			} else {
+				const int64_t byteSize = int64_t(size) * sizeof(real);
+				data = static_cast<real*>(malloc(byteSize));
+				if (!data) return;
+				for (int i = 0; i < this->size; ++i) {
+					data[i] = val;
+				}
+			}
+		}
+		real* data;
+		int size;
+	};
+
 	class TripletEl {
 	friend class TripletMatrixConstIterator;
 	public:
@@ -991,153 +1138,6 @@ namespace SMM {
 			out[index] = el.getValue();
 		}
 	}
-
-	class Vector {
-	public:
-		Vector() noexcept :
-			size(0),
-			data(nullptr)
-		{ }
-
-		Vector(const int size) noexcept :
-			size(size),
-			data(static_cast<real*>(malloc(size * sizeof(real))))
-		{ }
-
-		Vector(const int size, const real val) noexcept :
-			size(size)
-		{
-			initDataWithVal(val);
-		}
-
-		Vector(const std::initializer_list<real>& l) :
-			size(l.size()),
-			data(static_cast<real*>(malloc(l.size() * sizeof(real))))
-		{
-			std::copy(l.begin(), l.end(), data);
-		}
-
-		Vector(Vector&& other) noexcept :
-			size(other.size) {
-			free(data);
-			data = other.data;
-			other.data = nullptr;
-			other.size = 0;
-		}
-
-		Vector& operator=(Vector&& other) noexcept {
-			size = other.size;
-			free(data);
-			data = other.data;
-			other.data = nullptr;
-			other.size = 0;
-			return *this;
-		}
-
-		Vector(const Vector&) = delete;
-		Vector& operator=(const Vector&) = delete;
-
-		~Vector() {
-			free(data);
-			data = nullptr;
-			size = 0;
-		}
-
-		void init(const int size) {
-			assert(this->size == 0 && data == nullptr);
-			this->size = size;
-			data = static_cast<real*>(malloc(size * sizeof(real)));
-		}
-
-		void init(const int size, const real val) {
-			assert(this->size == 0 && data == nullptr);
-			this->size = size;
-			initDataWithVal(val);
-		}
-
-		const int getSize() const {
-			return this->size;
-		}
-
-		operator real* const() {
-			return data;
-		}
-
-		const real operator[](const int index) const {
-			assert(index < size);
-			return data[index];
-		}
-
-		real& operator[](const int index) {
-			assert(index < size);
-			return data[index];
-		}
-
-		Vector& operator+=(const Vector& other) {
-			assert(other.size == size);
-			for (int i = 0; i < size; ++i) {
-				data[i] += other[i];
-			}
-			return *this;
-		}
-
-		Vector& operator-=(const Vector& other) {
-			assert(other.size == size);
-			for (int i = 0; i < size; ++i) {
-				data[i] -= other[i];
-			}
-			return *this;
-		}
-
-		const real secondNorm() const {
-			real sum = 0.0f;
-			for (int i = 0; i < size; ++i) {
-				sum += data[i] * data[i];
-			}
-			return std::sqrt(sum);
-		}
-
-		const real operator*(const Vector& other) const {
-			assert(other.size == size);
-			real dot = 0.0f;
-			for (int i = 0; i < size; ++i) {
-				dot += other[i] * data[i];
-			}
-			return dot;
-		}
-
-		real* const begin() noexcept {
-			return data;
-		}
-
-		real* const end() noexcept {
-			return data + size;
-		}
-
-		void fill(const real value) {
-			if(value == 0.0f) {
-				memset(data, 0, sizeof(real) * size);
-			} else {
-				std::fill_n(data, size, value);
-			}
-		}
-
-	private:
-		void initDataWithVal(const real val) {
-			if (val == 0.0f) {
-				data = static_cast<real*>(calloc(size, sizeof(real)));
-			} else {
-				const int64_t byteSize = int64_t(size) * sizeof(real);
-				data = static_cast<real*>(malloc(byteSize));
-				if (!data) return;
-				for (int i = 0; i < this->size; ++i) {
-					data[i] = val;
-				}
-			}
-		}
-		real* data;
-		int size;
-	};
 
 	enum class SolverStatus {
 		SUCCESS = 0,
