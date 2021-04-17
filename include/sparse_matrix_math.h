@@ -220,7 +220,7 @@ namespace SMM {
 		std::map<uint64_t, real>::const_iterator it;
 	};
 
-	void swap(TripletEl& a, TripletEl& b) noexcept {
+	inline void swap(TripletEl& a, TripletEl& b) noexcept {
 		using std::swap;
 		swap(a.it, b.it);
 	}
@@ -268,7 +268,7 @@ namespace SMM {
 		TripletEl currentEl;
 	};
 
-	void swap(TripletMatrixConstIterator& a, TripletMatrixConstIterator& b) noexcept {
+	inline void swap(TripletMatrixConstIterator& a, TripletMatrixConstIterator& b) noexcept {
 		swap(a.currentEl, b.currentEl);
 	}
 
@@ -339,34 +339,34 @@ namespace SMM {
 		int denseColCount; ///< Number of columns in the matrix
 	};
 
-	TripletMatrix::TripletMatrix() :
+	inline TripletMatrix::TripletMatrix() :
 		denseRowCount(0),
 		denseColCount(0)
 	{ }
 
-	TripletMatrix::TripletMatrix(int denseRowCount, int denseColCount) noexcept :
+	inline TripletMatrix::TripletMatrix(int denseRowCount, int denseColCount) noexcept :
 		denseRowCount(denseRowCount),
 		denseColCount(denseColCount)
 	{ }
 
-	TripletMatrix::TripletMatrix(int denseRowCount, int denseColCount, int numTriplets) noexcept :
+	inline TripletMatrix::TripletMatrix(int denseRowCount, int denseColCount, int numTriplets) noexcept :
 		denseRowCount(denseRowCount),
 		denseColCount(denseColCount)
 	{ }
 
-	void TripletMatrix::init(const int denseRowCount, const int denseColCount, const int numTriplets) {
+	inline void TripletMatrix::init(const int denseRowCount, const int denseColCount, const int numTriplets) {
 		assert(getNonZeroCount() == 0 && getDenseRowCount() == 0 && getDenseColCount() == 0);
 		this->denseRowCount = denseRowCount;
 		this->denseColCount = denseColCount;
 	}
 
-	void TripletMatrix::deinit() {
+	inline void TripletMatrix::deinit() {
 		denseRowCount = 0;
 		denseColCount = 0;
 		data.clear();
 	}
 
-	void TripletMatrix::addEntry(int row, int col, real value) {
+	inline void TripletMatrix::addEntry(int row, int col, real value) {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
 		assert(col >= 0 && row < denseColCount);
@@ -438,7 +438,7 @@ namespace SMM {
 		int currentPositionIndex;
 	};
 
-	CSRElement::CSRElement(
+	inline CSRElement::CSRElement(
 		const real* values,
 		const int* positions,
 		const int* start,
@@ -452,18 +452,18 @@ namespace SMM {
 		currentPositionIndex(currentPositionIndex) {
 	}
 
-	const real CSRElement::getValue() const noexcept {
+	inline const real CSRElement::getValue() const noexcept {
 		return values[currentPositionIndex];
 	}
 
-	const int CSRElement::getRow() const noexcept {
+	inline const int CSRElement::getRow() const noexcept {
 		return currentStartIndex;
 	}
-	const int CSRElement::getCol() const noexcept {
+	inline const int CSRElement::getCol() const noexcept {
 		return positions[currentPositionIndex];
 	}
 
-	void swap(CSRElement& a, CSRElement& b) noexcept {
+	inline void swap(CSRElement& a, CSRElement& b) noexcept {
 		using std::swap;
 		swap(a.values, b.values);
 		swap(a.positions, b.positions);
@@ -472,7 +472,7 @@ namespace SMM {
 		swap(a.currentPositionIndex, b.currentPositionIndex);
 	}
 
-	const bool CSRElement::operator==(const CSRElement& other) const {
+	inline const bool CSRElement::operator==(const CSRElement& other) const {
 		return other.values == values &&
 			other.positions == positions &&
 			other.start == start &&
@@ -508,7 +508,7 @@ namespace SMM {
 		CSRElement currentElement;
 	};
 
-	CSRConstIterator::CSRConstIterator(
+	inline CSRConstIterator::CSRConstIterator(
 		const real* values,
 		const int* positions,
 		const int* start,
@@ -534,7 +534,7 @@ namespace SMM {
 		return !(*this == other);
 	}
 
-	CSRConstIterator& CSRConstIterator::operator++() noexcept {
+	inline CSRConstIterator& CSRConstIterator::operator++() noexcept {
 		currentElement.currentPositionIndex++;
 		assert(currentElement.currentPositionIndex <= currentElement.start[currentElement.currentStartIndex + 1]);
 		if (currentElement.currentPositionIndex == currentElement.start[currentElement.currentStartIndex + 1]) {
@@ -545,7 +545,7 @@ namespace SMM {
 		return *this;
 	}
 
-	CSRConstIterator CSRConstIterator::operator++(int) noexcept {
+	inline CSRConstIterator CSRConstIterator::operator++(int) noexcept {
 		CSRConstIterator initialState = *this;
 		++(*this);
 		return initialState;
@@ -720,7 +720,7 @@ namespace SMM {
 		) const noexcept;
 	};
 
-	CSRMatrix::CSRMatrix() noexcept :
+	inline CSRMatrix::CSRMatrix() noexcept :
 		values(nullptr),
 		positions(nullptr),
 		start(nullptr),
@@ -729,7 +729,7 @@ namespace SMM {
 		firstActiveStart(-1)
 	{ }
 
-	CSRMatrix::CSRMatrix(const TripletMatrix& triplet) noexcept :
+	inline CSRMatrix::CSRMatrix(const TripletMatrix& triplet) noexcept :
 		values(new real[triplet.getNonZeroCount()]),
 		positions(new int[triplet.getNonZeroCount()]),
 		start(new int[triplet.getDenseRowCount() + 1]),
@@ -740,7 +740,7 @@ namespace SMM {
 		fillArrays(triplet);
 	}
 
-	const int CSRMatrix::init(const TripletMatrix& triplet) noexcept {
+	inline const int CSRMatrix::init(const TripletMatrix& triplet) noexcept {
 		denseRowCount = triplet.getDenseRowCount();
 		denseColCount = triplet.getDenseColCount();
 		const int nnz = triplet.getNonZeroCount();
@@ -881,7 +881,7 @@ namespace SMM {
 		return currentStartIndex;
 	}
 
-	const int CSRMatrix::fillArrays(const TripletMatrix& triplet) noexcept {
+	inline const int CSRMatrix::fillArrays(const TripletMatrix& triplet) noexcept {
 		const int n = getDenseRowCount();
 		std::unique_ptr<int[], decltype(&free)> count(static_cast<int*>(calloc(n, sizeof(int))), &free);
 		if (count == nullptr) {
@@ -918,7 +918,7 @@ namespace SMM {
 	}
 
 	template<SolverPreconditioner precond>
-	decltype(auto) CSRMatrix::getPreconditioner() const noexcept {
+	inline decltype(auto) CSRMatrix::getPreconditioner() const noexcept {
 		if constexpr (precond == SolverPreconditioner::NONE) {
 			return IDPreconditioner();
 		} else if constexpr (precond == SolverPreconditioner::SYMMETRIC_GAUS_SEIDEL) {
