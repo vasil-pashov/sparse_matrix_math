@@ -632,6 +632,9 @@ namespace SMM {
 		/// Inplace addition of two CSR matrices.
 		/// @param[in] other The matrix which will be added to the current one
 		void inplaceAdd(const CSRMatrix& other);
+		/// Inplace subtraction of two CSR matrices.
+		/// @param[in] other The matrix which will be subtracted from the current one
+		void inplaceSubtract(const CSRMatrix& other);
 		/// Identity preconditioner. Does nothing, but implements the interface
 		class IDPreconditioner {
 			int apply(const real* rhs, real* x) const noexcept {
@@ -923,6 +926,14 @@ namespace SMM {
 		const int nonZeroCount = getNonZeroCount();
 		for(int i = 0; i < nonZeroCount; ++i) {
 			values[i] += other.values[i];
+		}
+	}
+
+	inline void CSRMatrix::inplaceSubtract(const CSRMatrix& other) {
+		assert(hasSameNonZeroPattern(other) && "The two matrices have different nonzero patterns");
+		const int nonZeroCount = getNonZeroCount();
+		for(int i = 0; i < nonZeroCount; ++i) {
+			values[i] -= other.values[i];
 		}
 	}
 

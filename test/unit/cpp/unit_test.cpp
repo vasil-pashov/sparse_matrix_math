@@ -490,6 +490,48 @@ TEST(CSRArithmetic, InplaceAdd) {
 	}
 }
 
+TEST(CSRArithmetic, InplaceSubtract) {
+	const int numRows = 6;
+	const int numCols = 10;
+
+	SMM::real denseRef1[numRows][numCols] = {};
+	denseRef1[2][8] = 28.41637;
+	denseRef1[2][2] = 31.52779;
+	denseRef1[1][7] = -237.59453;
+	denseRef1[5][3] = 273.3937;
+	denseRef1[0][3] = -471.11824;
+
+	SMM::real denseRef2[numRows][numCols] = {};
+	denseRef1[2][8] = 558.57004;
+	denseRef1[2][2] = 53.47841;
+	denseRef1[1][7] = 621.94377;
+	denseRef1[5][3] = 237.2853;
+	denseRef1[0][3] = -449.43152;
+
+	SMM::TripletMatrix triplet1(numRows, numCols);
+	SMM::TripletMatrix triplet2(numRows, numCols);
+	for(int i = 0; i < numRows; ++i) {
+		for(int j = 0; j < numCols; ++j) {
+			if(denseRef1[i][j] != 0) {
+				triplet1.addEntry(i, j, denseRef1[i][j]);
+				triplet2.addEntry(i, j, denseRef2[i][j]);
+			}
+		}
+	}
+
+	SMM::CSRMatrix csr1;
+	csr1.init(triplet1);
+
+	SMM::CSRMatrix csr2;
+	csr2.init(triplet2);
+
+	csr1.inplaceSubtract(csr2);
+
+	for(const auto& el : csr1) {
+		EXPECT_EQ(el.getValue(), denseRef1[el.getRow()][el.getCol()] - denseRef2[el.getRow()][el.getCol()]);
+	}
+}
+
 // =========================================================================
 // ============================== BiCGSymmetric ============================
 // =========================================================================
