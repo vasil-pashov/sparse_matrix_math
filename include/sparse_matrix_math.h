@@ -623,6 +623,10 @@ namespace SMM {
 		///< Makes sense only of multithreading is enabaled.
 		void rMultSub(const real* const lhs, const real* const mult, real* const out, const bool async = false) const noexcept;
 
+		/// Inplace multiplication by a scalar
+		/// @param[in] scalar The scalar which will multiply the matrix
+		void operator*=(const real* scalar);
+
 		/// Identity preconditioner. Does nothing, but implements the interface
 		class IDPreconditioner {
 			int apply(const real* rhs, real* x) const noexcept {
@@ -688,6 +692,7 @@ namespace SMM {
 		/// This is of length number of non-zero entries
 		std::unique_ptr<int[]> positions;
 		/// i-th element is index in positions and values where the i-th row starts
+		/// The last element contains the number of nonzero entries of the matrix
 		/// This is of length equal to the number of rows in the matrix
 		std::unique_ptr<int[]> start;
 		int denseRowCount; ///< Number of rows in the matrix
@@ -879,6 +884,13 @@ namespace SMM {
 			currentStartIndex++;
 		} while (currentStartIndex < startLength && start[currentStartIndex] == start[currentStartIndex + 1]);
 		return currentStartIndex;
+	}
+
+	inline void CSRMatrix::operator*=(const real scalar) {
+		const int nonZeroCount = getNonZeroCount();
+		for(int i = 0; i < nonZeroCount; ++i) {
+			values[i] *= scalar;
+		}
 	}
 
 	inline const int CSRMatrix::fillArrays(const TripletMatrix& triplet) noexcept {

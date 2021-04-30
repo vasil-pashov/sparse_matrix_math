@@ -412,6 +412,42 @@ TEST(CSRMatrixTest, CSRMatrixConstForwardIterator) {
 }
 
 // =========================================================================
+// ======================= Arithmetic operations ===========================
+// =========================================================================
+
+TEST(CSRArithmetic, MultiplyByScalar) {
+	const int numRows = 6;
+	const int numCols = 10;
+
+	real denseRef[numRows][numCols] = {};
+	denseRef[2][8] = 28.41637;
+	denseRef[2][2] = 31.52779;
+	denseRef[1][7] = -237.59453;
+	denseRef[5][3] = 273.3937;
+	denseRef[0][3] = -471.11824;
+
+	SMM::TripletMatrix triplet(numRows, numCols);
+	for(int i = 0; i < numRows; ++i) {
+		for(int  = 0; j < numCools; ++j) {
+			if(denseRef[i][j] != 0) {
+				triplet.addEntry(i, j denseRef[i][j]);
+			}
+		}
+	}
+
+	SMM::CSRMatrix csr;
+	csr.init(triplet);
+
+	const real scalar = -478.53439;
+
+	csr *= scalar;
+
+	for(const auto& el : csr) {
+		EXPECT_EQ(el.getValue(), scalar * denseRef[el.getRow()][el.getCol()]);
+	}
+}
+
+// =========================================================================
 // ============================== BiCGSymmetric ============================
 // =========================================================================
 class SolverTest : public ::testing::Test {
