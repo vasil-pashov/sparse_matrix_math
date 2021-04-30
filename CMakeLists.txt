@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.19.0)
 project(
 	sparse_matrix_math
-	VERSION 0.1.0
+	VERSION 0.2.0
 	DESCRIPTION "Library for sparse matrices" 
 )
 include(GNUInstallDirs)

@@ -17,7 +17,7 @@
 #endif // SMM_MULTITHREADING_CPPTM
 
 #define SMM_MAJOR_VERSION 0
-#define SMM_MINOR_VERSION 1
+#define SMM_MINOR_VERSION 2
 #define SMM_PATCH_VERSION 0
 
 namespace SMM {
