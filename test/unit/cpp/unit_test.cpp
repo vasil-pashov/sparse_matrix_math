@@ -419,7 +419,7 @@ TEST(CSRArithmetic, MultiplyByScalar) {
 	const int numRows = 6;
 	const int numCols = 10;
 
-	real denseRef[numRows][numCols] = {};
+	SMM::real denseRef[numRows][numCols] = {};
 	denseRef[2][8] = 28.41637;
 	denseRef[2][2] = 31.52779;
 	denseRef[1][7] = -237.59453;
@@ -428,9 +428,9 @@ TEST(CSRArithmetic, MultiplyByScalar) {
 
 	SMM::TripletMatrix triplet(numRows, numCols);
 	for(int i = 0; i < numRows; ++i) {
-		for(int  = 0; j < numCools; ++j) {
+		for(int j = 0; j < numCols; ++j) {
 			if(denseRef[i][j] != 0) {
-				triplet.addEntry(i, j denseRef[i][j]);
+				triplet.addEntry(i, j, denseRef[i][j]);
 			}
 		}
 	}
@@ -438,7 +438,7 @@ TEST(CSRArithmetic, MultiplyByScalar) {
 	SMM::CSRMatrix csr;
 	csr.init(triplet);
 
-	const real scalar = -478.53439;
+	const SMM::real scalar = -478.53439;
 
 	csr *= scalar;
 

@@ -625,7 +625,7 @@ namespace SMM {
 
 		/// Inplace multiplication by a scalar
 		/// @param[in] scalar The scalar which will multiply the matrix
-		void operator*=(const real* scalar);
+		void operator*=(const real scalar);
 
 		/// Identity preconditioner. Does nothing, but implements the interface
 		class IDPreconditioner {
