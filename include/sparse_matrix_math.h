@@ -626,11 +626,12 @@ namespace SMM {
 		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
 		///< Makes sense only of multithreading is enabaled.
 		void rMultSub(const real* const lhs, const real* const mult, real* const out, const bool async = false) const noexcept;
-
 		/// Inplace multiplication by a scalar
 		/// @param[in] scalar The scalar which will multiply the matrix
 		void operator*=(const real scalar);
-
+		/// Inplace addition of two CSR matrices.
+		/// @param[in] other The matrix which will be added to the current one
+		void inplaceAdd(const CSRMatrix& other);
 		/// Identity preconditioner. Does nothing, but implements the interface
 		class IDPreconditioner {
 			int apply(const real* rhs, real* x) const noexcept {
@@ -789,7 +790,7 @@ namespace SMM {
 		// It relies that all CSR matrices will order their elements the same way.
 		// For example it will not work if the elements in positions are the same, but
 		// reordered between the two matrices.
-		
+
 		const int denseRowCount = getDenseRowCount();
 		if(denseRowCount != other.getDenseRowCount()) return false;
 
@@ -914,6 +915,14 @@ namespace SMM {
 		const int nonZeroCount = getNonZeroCount();
 		for(int i = 0; i < nonZeroCount; ++i) {
 			values[i] *= scalar;
+		}
+	}
+
+	inline void CSRMatrix::inplaceAdd(const CSRMatrix& other) {
+		assert(hasSameNonZeroPattern(other) && "The two matrices have different nonzero patterns");
+		const int nonZeroCount = getNonZeroCount();
+		for(int i = 0; i < nonZeroCount; ++i) {
+			values[i] += other.values[i];
 		}
 	}
 
