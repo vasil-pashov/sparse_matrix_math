@@ -595,6 +595,10 @@ namespace SMM {
 		/// The iterator is guaranteed to iterate over rows in increasing fashion
 		/// The iterator is invalidated after init is called, or the object is destructed. Uses of invalid iterators are undefined behavior
 		/// @returns Constant iterator to the beggining of the matrix
+		/// Check if two matrices have the same nonzero pattern
+		/// @param[in] other The matrix which will be checked against the current one
+		/// @returns True if the two matrices share the same nonzero pattern
+		const bool hasSameNonZeroPattern(const CSRMatrix& other);
 		ConstIterator begin() const noexcept;
 		/// @brief Iterator to one element past the end of the matrix
 		/// It is undefined to dereference this iterator. Use it only in loop checks.
@@ -778,6 +782,26 @@ namespace SMM {
 
 	inline const int CSRMatrix::getDenseColCount() const noexcept {
 		return denseColCount;
+	}
+
+	inline const bool CSRMatrix::hasSameNonZeroPattern(const CSRMatrix& other) {
+		// This function checks if the two matrices have the same non zero pattern.
+		// It relies that all CSR matrices will order their elements the same way.
+		// For example it will not work if the elements in positions are the same, but
+		// reordered between the two matrices.
+		
+		const int denseRowCount = getDenseRowCount();
+		if(denseRowCount != other.getDenseRowCount()) return false;
+
+		if(getDenseColCount() != other.getDenseColCount()) return false;
+
+		const int nonZeroCount = getNonZeroCount();
+		if(nonZeroCount != other.getNonZeroCount()) return false;
+
+		if(memcmp(start.get(), other.start.get(), sizeof(int) * denseRowCount) != 0) return false;
+		if(memcmp(positions.get(), other.positions.get(), sizeof(int) * nonZeroCount) != 0) return false;
+
+		return true;
 	}
 
 	inline CSRMatrix::ConstIterator CSRMatrix::begin() const noexcept {
