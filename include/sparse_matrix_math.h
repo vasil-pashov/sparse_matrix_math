@@ -1505,10 +1505,16 @@ namespace SMM {
 		}
 		const real epsSq = eps * eps;
 		real residualNormSquared = r * r;
+		if(maxIterations == -1) {
+			maxIterations = rows;
+		}
 		for(int i = 0; i < maxIterations; ++i) {
 			a.rMult(p, Ap);
 			const real pAp = Ap * p;
-			assert(pAp > eps && "If the denominator is 0 we have a lucky breakdown. The residual at the previous step must be 0.");
+			// If the denominator is 0 we have a lucky breakdown. The residual at the previous step must be 0.
+			if(eps > pAp) {
+				return SolverStatus::SUCCESS;
+			}
 			// alpha = (r_i, r_i) / (Ap, p)
 			const real alpha = residualNormSquared / pAp;
 			// x = x + alpha * p
@@ -1524,7 +1530,8 @@ namespace SMM {
 			for(int j = 0; j < rows; ++j) {
 				p[j] = _smm_fma(beta, p[j], r[j]);
 			}
-			if(epsSq > newResidualNormSquared) {
+			residualNormSquared = newResidualNormSquared;
+			if(epsSq > residualNormSquared) {
 				return SolverStatus::SUCCESS;
 			}
 		}
