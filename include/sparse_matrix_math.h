@@ -144,6 +144,14 @@ namespace SMM {
 			return std::sqrt(sum);
 		}
 
+		const real secondNormSquared() const {
+			real sum = 0.0f;
+			for (int i = 0; i < size; ++i) {
+				sum += data[i] * data[i];
+			}
+			return sum;
+		}
+
 		const real operator*(const Vector& other) const {
 			assert(other.size == size);
 			real dot = 0.0f;
@@ -1352,8 +1360,8 @@ namespace SMM {
 	/// @param[in] b Right hand side for the system of equations
 	/// @param[in,out] x Initial condition, the result will be written here too 
 	/// @param[in] maxIterations Iterations threshold for the method.
-	///< If convergence was not reached for less than maxIterations the method will exit.
-	///< If maxIterations is -1 the method will do all possible iterations (the same as the number of rows in the matrix)
+	/// If convergence was not reached for less than maxIterations the method will exit.
+	/// If maxIterations is -1 the method will do all possible iterations (the same as the number of rows in the matrix)
 	/// @param[in] eps Required size of the L2 norm of the residual
 	/// @param[in] precond Preconditioner class which will be applied to the current system
 	/// @return SolverStatus the status the solved system
@@ -1454,7 +1462,11 @@ namespace SMM {
 	/// @brief solve a.x=b using BiConjugate Gradient Stabilized method
 	/// @param[in] a Coefficient matrix for the system of equations
 	/// @param[in] b Right hand side for the system of equations
-	/// @param[in,out] x Initial condition, the result will be written here too 
+	/// @param[in,out] x Initial condition, the result will be written here too
+	/// @param[in] maxIterations Iterations threshold for the method.
+	/// If convergence was not reached for less than maxIterations the method will exit.
+	/// If maxIterations is -1 the method will do all possible iterations (the same as the number of rows in the matrix)
+	/// @param[in] eps Required size of the L2 norm of the residual
 	/// @return SolverStatus the status the solved system
 	inline SolverStatus BiCGStab(
 		const CSRMatrix& a,
@@ -1466,6 +1478,66 @@ namespace SMM {
 		return BiCGStab(a, b, x, maxIterations, eps, a.getPreconditioner<SolverPreconditioner::NONE>());
 	}
 
+	///@brief Solve a.x=b using Cojugate Gradient method
+	/// Matrix a should be symmetric positive definite matrix. 
+	/// @param[in] a Coefficient matrix for the system of equations
+	/// @param[in] b Right hand side for the system of equations
+	/// @param[in,out] x Initial condition, the result will be written here too
+	/// @param[in] maxIterations Iterations threshold for the method.
+	/// If convergence was not reached for less than maxIterations the method will exit.
+	/// If maxIterations is -1 the method will do all possible iterations (the same as the number of rows in the matrix)
+	/// @param[in] eps Required size of the L2 norm of the residual
+	/// @return SolverStatus the status the solved system
+	inline SolverStatus ConjugateGradient(
+		const CSRMatrix& a,
+		real* b,
+		real* x,
+		int maxIterations,
+		real eps
+	) {
+		const int rows = a.getDenseRowCount();
+		Vector r(rows);
+		a.rMultSub(b, x, r);
+
+		Vector p(rows), Ap(rows);
+		for(int i = 0; i < rows; ++i) {
+			p[i] = r[i];
+		}
+		const real epsSq = eps * eps;
+		real residualNormSquared = r * r;
+		if(maxIterations == -1) {
+			maxIterations = rows;
+		}
+		for(int i = 0; i < maxIterations; ++i) {
+			a.rMult(p, Ap);
+			const real pAp = Ap * p;
+			// If the denominator is 0 we have a lucky breakdown. The residual at the previous step must be 0.
+			if(eps > pAp) {
+				return SolverStatus::SUCCESS;
+			}
+			// alpha = (r_i, r_i) / (Ap, p)
+			const real alpha = residualNormSquared / pAp;
+			// x = x + alpha * p
+			// r = r - alpha * Ap
+			for(int j = 0; j < rows; ++j) {
+				x[j] = _smm_fma(alpha, p[j], x[j]);
+				r[j] = _smm_fma(-alpha, Ap[j], r[j]);
+			}
+			const real newResidualNormSquared = r * r;
+			// beta = (r_{i+1}, r_(i+1)) / (r_i, r_i)
+			const real beta = newResidualNormSquared / residualNormSquared;
+			// p = r + beta * p
+			for(int j = 0; j < rows; ++j) {
+				p[j] = _smm_fma(beta, p[j], r[j]);
+			}
+			residualNormSquared = newResidualNormSquared;
+			if(epsSq > residualNormSquared) {
+				return SolverStatus::SUCCESS;
+			}
+		}
+		return SolverStatus::MAX_ITERATIONS_REACHED;
+	}
+	
 	enum class MatrixLoadStatus {
 		// Generic success code
 		SUCCESS = 0,
