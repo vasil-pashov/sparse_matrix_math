@@ -618,9 +618,7 @@ namespace SMM {
 		/// Where A is the current CSR matrix
 		/// @param[in] mult The vector which will multiply the matrix to the right
 		/// @param[out] out Preallocated vector where the result is stored
-		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
-		///< Makes sense only of multithreading is enabaled.
-		void rMult(const real* const mult, real* const out, const bool async = false) const noexcept;
+		void rMult(const real* const mult, real* const out) const noexcept;
 		/// @brief Perform matrix vector multiplication and addition: out = lhs + A * mult
 		/// Where A is the current CSR matrix
 		/// @param[in] lhs The vector which will be added to the matrix vector product A * mult
@@ -628,7 +626,7 @@ namespace SMM {
 		/// @param[out] out Preallocated vector where the result is stored
 		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
 		///< Makes sense only of multithreading is enabaled.
-		void rMultAdd(const real* const lhs, const real* const mult, real* const out, const bool async = false) const noexcept;
+		void rMultAdd(const real* const lhs, const real* const mult, real* const out) const noexcept;
 		/// @brief Perform matrix vector multiplication and subtraction: out = lhs - A * mult
 		/// Where A is the current CSR matrix
 		/// @param[in] lhs The vector from which the matrix vector product A * mult will be subtracted
@@ -636,7 +634,34 @@ namespace SMM {
 		/// @param[out] out Preallocated vector where the result is stored
 		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
 		///< Makes sense only of multithreading is enabaled.
-		void rMultSub(const real* const lhs, const real* const mult, real* const out, const bool async = false) const noexcept;
+		void rMultSub(const real* const lhs, const real* const mult, real* const out) const noexcept;
+
+		#if SMM_MULTITHREADING_CPPTM
+		/// @brief Perform matrix vector multiplication out = A * mult in a multithreaded fashion.
+		/// Where A is the current CSR matrix
+		/// @param[in] mult The vector which will multiply the matrix to the right
+		/// @param[out] out Preallocated vector where the result is stored
+		/// @param[in, out] tm The thred manager which will run the multithreaded job
+		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
+		void rMult(const real* const mult, real* const out, CPPTM::ThreadManager& tm, const bool async);
+		/// @brief Perform matrix vector multiplication and addition: out = lhs + A * mult in a multithreaded fashion.
+		/// Where A is the current CSR matrix
+		/// @param[in] lhs The vector which will be added to the matrix vector product A * mult
+		/// @param[in] mult The vector which will multiply the matrix to the right
+		/// @param[out] out Preallocated vector where the result is stored
+		/// @param[in, out] tm The thred manager which will run the multithreaded job
+		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
+		void rMultAdd(const real* const lhs, const real* const mult, real* const out, CPPTM::ThreadManager& tm, const bool async) const noexcept;
+		/// @brief Perform matrix vector multiplication and subtraction: out = lhs - A * mult
+		/// Where A is the current CSR matrix
+		/// @param[in] lhs The vector from which the matrix vector product A * mult will be subtracted
+		/// @param[in] mult The vector which will multiply the matrix to the right
+		/// @param[out] out Preallocated vector where the result is stored
+		/// @param[in, out] tm The thred manager which will run the multithreaded job
+		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
+		void rMultSub(const real* const lhs, const real* const mult, real* const out, CPPTM::ThreadManager& tm, const bool async) const noexcept;
+		#endif
+
 		/// Inplace multiplication by a scalar
 		/// @param[in] scalar The scalar which will multiply the matrix
 		void operator*=(const real scalar);
@@ -870,27 +895,27 @@ namespace SMM {
 #endif
 	}
 
-	inline void CSRMatrix::rMult(const real* const mult, real* const res, const bool async) const noexcept {
+	inline void CSRMatrix::rMult(const real* const mult, real* const res) const noexcept {
 		assert(mult != res);
 		auto rhsId = [](const real lhs, const  real rhs) -> real {
 			return rhs;
 		};
-		rMultOp(res, mult, res, rhsId, async);
+		rMultOp(res, mult, res, rhsId, false);
 	}
 
-	inline void CSRMatrix::rMultAdd(const real* const lhs, const real* const mult, real* const out, const bool async) const noexcept {
+	inline void CSRMatrix::rMultAdd(const real* const lhs, const real* const mult, real* const out) const noexcept {
 		auto addOp = [](const real lhs, const real rhs) ->real {
 			return lhs + rhs;
 		};
-		rMultOp(lhs, mult, out, addOp, async);
+		rMultOp(lhs, mult, out, addOp, false);
 	}
 
 
-	inline void CSRMatrix::rMultSub(const real* const lhs, const real* const mult, real* const out, const bool async) const noexcept {
+	inline void CSRMatrix::rMultSub(const real* const lhs, const real* const mult, real* const out) const noexcept {
 		auto addOp = [](const real lhs, const real rhs) ->real {
 			return lhs - rhs;
 		};
-		rMultOp(lhs, mult, out, addOp, async);
+		rMultOp(lhs, mult, out, addOp, false);
 	}
 
 	inline const int CSRMatrix::getNextStartIndex(int currentStartIndex, int startLength) const noexcept {
