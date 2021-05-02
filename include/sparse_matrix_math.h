@@ -14,6 +14,9 @@
 
 #ifdef SMM_MULTITHREADING_CPPTM
 #include <cpp_tm/cpp_tm.h>
+#if CPP_TM_MAJOR_VERSION != 0 || CPP_TM_MINOR_VERSION != 2
+#error "Expected verson 0.2 of cpp_tm library"
+#endif
 #endif // SMM_MULTITHREADING_CPPTM
 
 #define SMM_MAJOR_VERSION 0
@@ -833,51 +836,26 @@ namespace SMM {
 		const bool async
 	) const noexcept {
 #ifdef SMM_MULTITHREADING_CPPTM
-		struct rMultOpTask final : public CPPTM::ITask {
-			rMultOpTask(
-				const CSRMatrix* csr,
-				const real* const lhs,
-				const real* const mult,
-				real* const out,
-				const FunctorType& op
-			) :
-				csr(csr),
-				lhs(lhs),
-				mult(mult),
-				out(out),
-				op(op)
-			{ }
-
-			const CSRMatrix* csr;
-			const real* const lhs;
-			const real* const mult;
-			real* const out;
-			const FunctorType& op;
-
-			CPPTM::CPPTMStatus runTask(int blockIndex, int numBlocks) noexcept override {
-				const int rows = csr->getDenseRowCount();
-				const int blockSize = (rows + numBlocks) / numBlocks;
-				const int startIdx = blockSize * blockIndex;
-				const int end = std::min(rows, startIdx + blockSize);
-				const int start = startIdx == 0 ? csr->firstActiveStart : csr->getNextStartIndex(startIdx - 1, rows);
-				for (int row = start; row < end; row = csr->getNextStartIndex(row, rows)) {
-					real dot = 0.0f;
-					for (int colIdx = csr->start[row]; colIdx < csr->start[row + 1]; ++colIdx) {
-						const int col = csr->positions[colIdx];
-						const real val = csr->values[colIdx];
-						dot = _smm_fma(val, mult[col], dot);
-					}
-					out[row] = op(lhs[row], dot);
+		const auto rMultOpTask = [&,this](const int blockIndex, const int numBlocks) {
+			const int blockSize = (denseRowCount + numBlocks) / numBlocks;
+			const int startIdx = blockSize * blockIndex;
+			const int end = std::min(denseRowCount, startIdx + blockSize);
+			const int start = startIdx == 0 ? firstActiveStart : getNextStartIndex(startIdx - 1, denseRowCount);
+			for (int row = start; row < end; row = getNextStartIndex(row, denseRowCount)) {
+				real dot = 0.0f;
+				for (int colIdx = this->start[row]; colIdx < this->start[row + 1]; ++colIdx) {
+					const int col = positions[colIdx];
+					const real val = values[colIdx];
+					dot = _smm_fma(val, mult[col], dot);
 				}
-				return CPPTM::CPPTMStatus::SUCCESS;
+				out[row] = op(lhs[row], dot);
 			}
 		};
 		CPPTM::ThreadManager& globalTm = CPPTM::getGlobalTM();
 		if (async) {
-			globalTm.launchAsync(std::make_unique<rMultOpTask>(this, lhs, mult, out, op));
+			globalTm.launchAsync(std::move(rMultOpTask));
 		} else {
-			rMultOpTask task(this, lhs, mult, out, op);
-			globalTm.launchSync(&task);
+			globalTm.launchSync(rMultOpTask);
 		}
 #else
 		for (int row = firstActiveStart; row < denseRowCount; row = getNextStartIndex(row, denseRowCount)) {
