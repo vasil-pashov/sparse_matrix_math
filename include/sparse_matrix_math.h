@@ -333,6 +333,14 @@ namespace SMM {
 		/// @param[in] newValue The new value of the entry at (row, col)
 		/// @returns True if the there is an entry at (row, col) and the update is successful
 		bool updateEntry(const int row, const int col, const real newValue);
+		/// Retrieve the value of the element at position (row, col)
+		/// IMPORTANT: The getting element is NOT constant operation. Directly getting elements
+		/// must be avoided.
+		/// @param[in] row The row of the element
+		/// @param[in] col The column of the element
+		/// @returns The value of the element at position (row, col). Note 0 is possible result, but
+		/// it does not mean that the element at (row, col) is imlicit (not in the sparse structure)
+		real getValue(const int row, const int col) const;
 		/// @brief Get constant iterator to the first element of the triplet list
 		/// @return Constant iterator to the first element of the triplet list
 		ConstIterator begin() const noexcept;
@@ -408,6 +416,18 @@ namespace SMM {
 			return true;
 		}
 		return false;
+	}
+
+	inline real TripletMatrix::getValue(const int row, const int col) const {
+		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
+		assert(row >= 0 && row < denseRowCount);
+		assert(col >= 0 && row < denseColCount);
+		const uint64_t key = (uint64_t(row) << 32) | uint64_t(col);
+		auto it = data.find(key);
+		if(it == data.end()) {
+			return real(0);
+		}
+		return it->second;
 	}
 
 	inline TripletMatrix::ConstIterator TripletMatrix::begin() const noexcept {
