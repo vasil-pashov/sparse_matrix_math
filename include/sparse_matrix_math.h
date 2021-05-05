@@ -1086,14 +1086,14 @@ namespace SMM {
 
 	inline int CSRMatrix::getValueIndex(const int row, const int col) const {
 		// Assumes that the columns are sorted in increasing order
-		int rowBegin = positions[start[row]];
-		int rowEnd = positions[start[row + 1]] - 1;
+		int rowBegin = start[row];
+		int rowEnd = start[row + 1] - 1;
 		while(rowBegin <= rowEnd) {
 			const int mid = (rowBegin + rowEnd) / 2;
 			const int currentColumn = positions[mid];
-			if(currentColumn > col) {
+			if(col > currentColumn) {
 				rowBegin = mid + 1;
-			} else if(currentColumn < col) {
+			} else if(col < currentColumn) {
 				rowEnd = mid - 1;
 			} else {
 				return mid;
