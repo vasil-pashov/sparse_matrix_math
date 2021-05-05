@@ -401,7 +401,7 @@ namespace SMM {
 		if (it == data.end()) {
 			data[key] = value;
 		} else {
-			data[key] += value;
+			it->second += value;
 		}
 	}
 
@@ -412,7 +412,7 @@ namespace SMM {
 		const uint64_t key = (uint64_t(row) << 32) | uint64_t(col);
 		auto it = data.find(key);
 		if(it != data.end()) {
-			data[key] = newValue;
+			it->second = newValue;
 			return true;
 		}
 		return false;
