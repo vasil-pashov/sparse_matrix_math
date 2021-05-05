@@ -326,6 +326,21 @@ namespace SMM {
 		/// @param col Column of the element
 		/// @param value The value of the element at (row, col)
 		void addEntry(int row, int col, real value);
+		/// If a non zero entry exists at position (row, col) set its value
+		/// Does nothing if there is no nonzero entry at (row, col)
+		/// @param[in] row The row of the entry which is going to be updated
+		/// @param[in] col The column of the entry which is going to be updated
+		/// @param[in] newValue The new value of the entry at (row, col)
+		/// @returns True if the there is an entry at (row, col) and the update is successful
+		bool updateEntry(const int row, const int col, const real newValue);
+		/// Retrieve the value of the element at position (row, col)
+		/// IMPORTANT: The getting element is NOT constant operation. Directly getting elements
+		/// must be avoided.
+		/// @param[in] row The row of the element
+		/// @param[in] col The column of the element
+		/// @returns The value of the element at position (row, col). Note 0 is possible result, but
+		/// it does not mean that the element at (row, col) is imlicit (not in the sparse structure)
+		real getValue(const int row, const int col) const;
 		/// @brief Get constant iterator to the first element of the triplet list
 		/// @return Constant iterator to the first element of the triplet list
 		ConstIterator begin() const noexcept;
@@ -334,13 +349,13 @@ namespace SMM {
 		ConstIterator end() const noexcept;
 		/// @brief Get the number of triplets
 		/// @return Number of triplets into the array
-		const int getNonZeroCount() const noexcept;
+		int getNonZeroCount() const noexcept;
 		/// @brief Get the total number of rows of the matrix
 		/// @return The row count which dense matrix is supposed to have (not only the stored ones)
-		const int getDenseRowCount() const noexcept;
+		int getDenseRowCount() const noexcept;
 		/// @brief Get the total number of cols of the matrix
 		/// @return The column count which dense matrix is supposed to have (not only the stored ones)
-		const int getDenseColCount() const noexcept;
+		int getDenseColCount() const noexcept;
 	private:
 		/// @brief Keep track of repeating indexes
 		/// Key is unique representation of the matrix index (first 32 bits are the col second are the row)
@@ -390,6 +405,31 @@ namespace SMM {
 		}
 	}
 
+	inline bool TripletMatrix::updateEntry(const int row, const int col, const real newValue) {
+		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
+		assert(row >= 0 && row < denseRowCount);
+		assert(col >= 0 && row < denseColCount);
+		const uint64_t key = (uint64_t(row) << 32) | uint64_t(col);
+		auto it = data.find(key);
+		if(it != data.end()) {
+			data[key] = newValue;
+			return true;
+		}
+		return false;
+	}
+
+	inline real TripletMatrix::getValue(const int row, const int col) const {
+		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
+		assert(row >= 0 && row < denseRowCount);
+		assert(col >= 0 && row < denseColCount);
+		const uint64_t key = (uint64_t(row) << 32) | uint64_t(col);
+		auto it = data.find(key);
+		if(it == data.end()) {
+			return real(0);
+		}
+		return it->second;
+	}
+
 	inline TripletMatrix::ConstIterator TripletMatrix::begin() const noexcept {
 		return ConstIterator(data.cbegin());
 	}
@@ -398,15 +438,15 @@ namespace SMM {
 		return ConstIterator(data.cend());
 	}
 
-	inline const int TripletMatrix::getNonZeroCount() const noexcept {
+	inline int TripletMatrix::getNonZeroCount() const noexcept {
 		return data.size();
 	}
 
-	inline const int TripletMatrix::getDenseRowCount() const noexcept {
+	inline int TripletMatrix::getDenseRowCount() const noexcept {
 		return denseRowCount;
 	}
 
-	inline const int TripletMatrix::getDenseColCount() const noexcept {
+	inline int TripletMatrix::getDenseColCount() const noexcept {
 		return denseColCount;
 	}
 
@@ -590,17 +630,17 @@ namespace SMM {
 
 		~CSRMatrix() = default;
 
-		const int init(const TripletMatrix& triplet) noexcept;
+		int init(const TripletMatrix& triplet) noexcept;
 		/// @brief Get the number of trivial nonzero entries in the matrix
 		/// Trivial nonzero entries do not include zero elements which came from numerical cancellation
 		/// @return The number of trivial nonzero entries in the matrix
-		const int getNonZeroCount() const noexcept;
+		int getNonZeroCount() const noexcept;
 		/// @brief Get the total number of rows of the matrix
 		/// @return The row count which dense matrix is supposed to have (not only the stored ones)
-		const int getDenseRowCount() const noexcept;
+		int getDenseRowCount() const noexcept;
 		/// @brief Get the total number of cols of the matrix
 		/// @return The column count which dense matrix is supposed to have (not only the stored ones)
-		const int getDenseColCount() const noexcept;
+		int getDenseColCount() const noexcept;
 		/// @brief Get constant iterator to the beggining of the matrix.
 		/// The iterator will start at the first non empty row and will finish at the last non empty row
 		/// The iterator is guaranteed to iterate over rows in increasing fashion
@@ -609,7 +649,7 @@ namespace SMM {
 		/// Check if two matrices have the same nonzero pattern
 		/// @param[in] other The matrix which will be checked against the current one
 		/// @returns True if the two matrices share the same nonzero pattern
-		const bool hasSameNonZeroPattern(const CSRMatrix& other);
+		bool hasSameNonZeroPattern(const CSRMatrix& other);
 		ConstIterator begin() const noexcept;
 		/// @brief Iterator to one element past the end of the matrix
 		/// It is undefined to dereference this iterator. Use it only in loop checks.
@@ -645,6 +685,22 @@ namespace SMM {
 		/// Inplace subtraction of two CSR matrices.
 		/// @param[in] other The matrix which will be subtracted from the current one
 		void inplaceSubtract(const CSRMatrix& other);
+
+		/// If a non zero entry exists at position (row, col) set its value
+		/// Does nothing if there is no nonzero entry at (row, col)
+		/// @param[in] row The row of the entry which is going to be updated
+		/// @param[in] col The column of the entry which is going to be updated
+		/// @param[in] newValue The new value of the entry at (row, col)
+		/// @returns True if the there is an entry at (row, col) and the update is successful
+		bool updateEntry(const int row, const int col, const real newValue);
+		/// Retrieve the value of the element at position (row, col)
+		/// IMPORTANT: The getting element is NOT constant operation. Getting elements directly
+		/// must be avoided.
+		/// @param[in] row The row of the element
+		/// @param[in] col The column of the element
+		/// @returns The value of the element at position (row, col). Note 0 is possible result, but
+		/// it does not mean that the element at (row, col) is imlicit (not in the sparse structure)
+		real getValue(const int row, const int col) const;
 
 		// ********************************************************************
 		// *********** MULTITHREADED VARIANTS OF MATRIX FUNCTIONS *************
@@ -768,6 +824,13 @@ namespace SMM {
 		template<typename FunctorType>
 		void rMultOp(const real* const lhs, const real* const mult, real* const out, const FunctorType& op) const noexcept;
 
+		/// Check if there is element at (row, col) and return the index in positions where the elements is
+		/// if there is no such element return -1.
+		/// @param[in] row The row of the element
+		/// @param[in] col The column of the element
+		/// @returns The index of the element in positions/values, or -1 if there is no element at (row, col)
+		int getValueIndex(const int row, const int col) const;
+
 		#if defined(SMM_MULTITHREADING_CPPTM)
 		/// @brief Generic function to which will perfrom out = op(lhs, A * mult).
 		/// It is allowed out to be the same pointer as lhs.
@@ -810,7 +873,7 @@ namespace SMM {
 		fillArrays(triplet);
 	}
 
-	inline const int CSRMatrix::init(const TripletMatrix& triplet) noexcept {
+	inline int CSRMatrix::init(const TripletMatrix& triplet) noexcept {
 		denseRowCount = triplet.getDenseRowCount();
 		denseColCount = triplet.getDenseColCount();
 		const int nnz = triplet.getNonZeroCount();
@@ -833,19 +896,19 @@ namespace SMM {
 		return 0;
 	}
 
-	inline const int CSRMatrix::getNonZeroCount() const noexcept {
+	inline int CSRMatrix::getNonZeroCount() const noexcept {
 		return start[getDenseRowCount()];
 	}
 
-	inline const int CSRMatrix::getDenseRowCount() const noexcept {
+	inline int CSRMatrix::getDenseRowCount() const noexcept {
 		return denseRowCount;
 	}
 
-	inline const int CSRMatrix::getDenseColCount() const noexcept {
+	inline int CSRMatrix::getDenseColCount() const noexcept {
 		return denseColCount;
 	}
 
-	inline const bool CSRMatrix::hasSameNonZeroPattern(const CSRMatrix& other) {
+	inline bool CSRMatrix::hasSameNonZeroPattern(const CSRMatrix& other) {
 		// This function checks if the two matrices have the same non zero pattern.
 		// It relies that all CSR matrices will order their elements the same way.
 		// For example it will not work if the elements in positions are the same, but
@@ -1019,6 +1082,40 @@ namespace SMM {
 		for(int i = 0; i < nonZeroCount; ++i) {
 			values[i] -= other.values[i];
 		}
+	}
+
+	inline int CSRMatrix::getValueIndex(const int row, const int col) const {
+		// Assumes that the columns are sorted in increasing order
+		int rowBegin = start[row];
+		int rowEnd = start[row + 1] - 1;
+		while(rowBegin <= rowEnd) {
+			const int mid = (rowBegin + rowEnd) / 2;
+			const int currentColumn = positions[mid];
+			if(col > currentColumn) {
+				rowBegin = mid + 1;
+			} else if(col < currentColumn) {
+				rowEnd = mid - 1;
+			} else {
+				return mid;
+			}
+		}
+		return -1;
+	}
+
+	inline bool CSRMatrix::updateEntry(const int row, const int col, const real newValue) {
+		const int index = getValueIndex(row, col);
+		if(index != -1) {
+			values[index] = newValue;
+			return true;
+		}
+		return false;
+	}
+	inline real CSRMatrix::getValue(const int row, const int col) const {
+		const int index = getValueIndex(row, col);
+		if(index != -1) {
+			return values[index];
+		}
+		return real(0);
 	}
 
 	inline const int CSRMatrix::fillArrays(const TripletMatrix& triplet) noexcept {

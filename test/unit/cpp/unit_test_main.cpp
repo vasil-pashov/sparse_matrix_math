@@ -126,9 +126,112 @@ TEST(TripletMatrixTest, ToLinearDenseRowMajor) {
 	}
 }
 
+TEST(TripletMatrixTest, DirectAccessors) {
+	const int numRows = 4;
+	const int numCols = 4;
+	const int numElements = 10;
+	SMM::TripletMatrix m(numRows, numCols, numElements);
+	const int denseSize = numRows * numCols;
+	SMM::real denseRef[denseSize] = {
+		4.5f, 0.0f, 3.2f, 0.0f,
+		3.1f, 2.9f, 0.0f, 0.9f,
+		0.0f, 1.7f, 3.0f, 0.0f,
+		3.5f, 0.4f, 0.0f, 1.0f
+	};
+	m.addEntry(0, 0, 3.0f); // Add (0, 0) as sum
+	m.addEntry(0, 2, 3.2f);
+	m.addEntry(1, 1, 2.9f);
+	m.addEntry(0, 0, 1.0f); // Add (0, 0) as sum
+	m.addEntry(0, 0, 0.5f); // Add (0, 0) as sum
+	m.addEntry(1, 0, 3.1f);
+	m.addEntry(1, 3, 0.9f);
+	m.addEntry(2, 2, 2.1f); // Add (2,2) as sum
+	m.addEntry(2, 1, 2.0f); // Add (2, 1) as sum
+	m.addEntry(2, 2, 0.9f); // Add (2,2) as sum
+	m.addEntry(2, 1, -0.3f); // Add (2, 1) as sum
+	m.addEntry(3, 0, 3.5f);
+	m.addEntry(3, 1, 0.4f);
+	m.addEntry(3, 3, 1.0f);
+
+	for(int i = 0; i < numRows; ++i) {
+		for(int j = 0; j < numCols; ++j) {
+			EXPECT_EQ(m.getValue(i, j), denseRef[i * numCols + j]);
+		}
+	}
+
+	// Update non existing element
+	EXPECT_FALSE(m.updateEntry(0, 1, 2));
+
+	// Update existing element
+	EXPECT_TRUE(m.updateEntry(1, 3, 200));
+
+	EXPECT_EQ(m.getValue(1, 3), 200);
+
+	denseRef[1 * numCols + 3] = 200;
+
+	SMM::real dense[denseSize] = {};
+	SMM::toLinearDenseRowMajor(m, dense);
+	for (int i = 0; i < denseSize; ++i) {
+		EXPECT_NEAR(dense[i], denseRef[i], 10e-6);
+	}
+}
+
 // ==========================================================================
 // ==================== COMPRESSED SPARSE MATRIX COMMON =====================
 // ==========================================================================
+
+TEST(CSRMatrix, DirectAccessors) {
+	const int numRows = 4;
+	const int numCols = 4;
+	const int numElements = 10;
+	SMM::TripletMatrix triplet(numRows, numCols, numElements);
+	const int denseSize = numRows * numCols;
+	SMM::real denseRef[denseSize] = {
+		4.5f, 0.0f, 3.2f, 0.0f,
+		3.1f, 2.9f, 0.0f, 0.9f,
+		0.0f, 1.7f, 3.0f, 0.0f,
+		3.5f, 0.4f, 0.0f, 1.0f
+	};
+	triplet.addEntry(0, 0, 3.0f); // Add (0, 0) as sum
+	triplet.addEntry(0, 2, 3.2f);
+	triplet.addEntry(1, 1, 2.9f);
+	triplet.addEntry(0, 0, 1.0f); // Add (0, 0) as sum
+	triplet.addEntry(0, 0, 0.5f); // Add (0, 0) as sum
+	triplet.addEntry(1, 0, 3.1f);
+	triplet.addEntry(1, 3, 0.9f);
+	triplet.addEntry(2, 2, 2.1f); // Add (2,2) as sum
+	triplet.addEntry(2, 1, 2.0f); // Add (2, 1) as sum
+	triplet.addEntry(2, 2, 0.9f); // Add (2,2) as sum
+	triplet.addEntry(2, 1, -0.3f); // Add (2, 1) as sum
+	triplet.addEntry(3, 0, 3.5f);
+	triplet.addEntry(3, 1, 0.4f);
+	triplet.addEntry(3, 3, 1.0f);
+
+	SMM::CSRMatrix m;
+	m.init(triplet);
+
+	for(int i = 0; i < numRows; ++i) {
+		for(int j = 0; j < numCols; ++j) {
+			EXPECT_EQ(m.getValue(i, j), denseRef[i * numCols + j]);
+		}
+	}
+
+	// Update non existing element
+	EXPECT_FALSE(m.updateEntry(0, 1, 2));
+
+	// Update existing element
+	EXPECT_TRUE(m.updateEntry(1, 3, 200));
+
+	EXPECT_EQ(m.getValue(1, 3), 200);
+
+	denseRef[1 * numCols + 3] = 200;
+
+	SMM::real dense[denseSize] = {};
+	SMM::toLinearDenseRowMajor(m, dense);
+	for (int i = 0; i < denseSize; ++i) {
+		EXPECT_NEAR(dense[i], denseRef[i], 10e-6);
+	}
+}
 
 
 template <typename CSMatrix_t>
