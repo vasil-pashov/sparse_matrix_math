@@ -1085,6 +1085,8 @@ namespace SMM {
 	}
 
 	inline int CSRMatrix::getValueIndex(const int row, const int col) const {
+		assert(row >= 0 && row < denseRowCount);
+		assert(col >= 0 && col < denseColCount);
 		// Assumes that the columns are sorted in increasing order
 		int rowBegin = start[row];
 		int rowEnd = start[row + 1] - 1;
