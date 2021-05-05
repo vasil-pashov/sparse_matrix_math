@@ -326,6 +326,13 @@ namespace SMM {
 		/// @param col Column of the element
 		/// @param value The value of the element at (row, col)
 		void addEntry(int row, int col, real value);
+		/// If a non zero entry exists at position (row, col) set its value
+		/// Does nothing if there is no nonzero entry at (row, col)
+		/// @param[in] row The row of the entry which is going to be updated
+		/// @param[in] col The column of the entry which is going to be updated
+		/// @param[in] newValue The new value of the entry at (row, col)
+		/// @returns True if the there is an entry at (row, col) and the update is successful
+		bool updateEntry(const int row, const int col, const real newValue);
 		/// @brief Get constant iterator to the first element of the triplet list
 		/// @return Constant iterator to the first element of the triplet list
 		ConstIterator begin() const noexcept;
@@ -386,8 +393,21 @@ namespace SMM {
 		if (it == data.end()) {
 			data[key] = value;
 		} else {
-			data[key] += value;
+			it->second += value;
 		}
+	}
+
+	inline bool TripletMatrix::updateEntry(const int row, const int col, const real newValue) {
+		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
+		assert(row >= 0 && row < denseRowCount);
+		assert(col >= 0 && row < denseColCount);
+		const uint64_t key = (uint64_t(row) << 32) | uint64_t(col);
+		auto it = data.find(key);
+		if(it != data.end()) {
+			it->second = newValue;
+			return true;
+		}
+		return false;
 	}
 
 	inline TripletMatrix::ConstIterator TripletMatrix::begin() const noexcept {
