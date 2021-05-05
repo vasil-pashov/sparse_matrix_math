@@ -2,7 +2,7 @@
 include(CMakeFindDependencyMacro)
 
 if(@SMM_MULTITHREADING@ STREQUAL "CPPTM")
-    find_dependency(cpp_tm 0.1.0)
+    find_dependency(cpp_tm @CPPTM_VERSION@)
 endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/@PROJECT_NAME@Targets.cmake")
