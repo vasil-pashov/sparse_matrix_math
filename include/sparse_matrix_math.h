@@ -693,6 +693,14 @@ namespace SMM {
 		/// @param[in] newValue The new value of the entry at (row, col)
 		/// @returns True if the there is an entry at (row, col) and the update is successful
 		bool updateEntry(const int row, const int col, const real newValue);
+		/// Retrieve the value of the element at position (row, col)
+		/// IMPORTANT: The getting element is NOT constant operation. Getting elements directly
+		/// must be avoided.
+		/// @param[in] row The row of the element
+		/// @param[in] col The column of the element
+		/// @returns The value of the element at position (row, col). Note 0 is possible result, but
+		/// it does not mean that the element at (row, col) is imlicit (not in the sparse structure)
+		real getValue(const int row, const int col) const;
 
 		// ********************************************************************
 		// *********** MULTITHREADED VARIANTS OF MATRIX FUNCTIONS *************
@@ -815,6 +823,13 @@ namespace SMM {
 		/// @param[in] op Functor which will execute op(lhs, A * mult) it must take in two real vectors.
 		template<typename FunctorType>
 		void rMultOp(const real* const lhs, const real* const mult, real* const out, const FunctorType& op) const noexcept;
+
+		/// Check if there is element at (row, col) and return the index in positions where the elements is
+		/// if there is no such element return -1.
+		/// @param[in] row The row of the element
+		/// @param[in] col The column of the element
+		/// @returns The index of the element in positions/values, or -1 if there is no element at (row, col)
+		int getValueIndex(const int row, const int col) const;
 
 		#if defined(SMM_MULTITHREADING_CPPTM)
 		/// @brief Generic function to which will perfrom out = op(lhs, A * mult).
@@ -1069,7 +1084,7 @@ namespace SMM {
 		}
 	}
 
-	inline bool CSRMatrix::updateEntry(const int row, const int col, const real newValue) {
+	inline int CSRMatrix::getValueIndex(const int row, const int col) const {
 		// Assumes that the columns are sorted in increasing order
 		int rowBegin = positions[start[row]];
 		int rowEnd = positions[start[row + 1]] - 1;
@@ -1081,12 +1096,26 @@ namespace SMM {
 			} else if(currentColumn < col) {
 				rowEnd = mid - 1;
 			} else {
-				assert(currentColumn == col);
-				values[mid] = newValue;
-				return true;
+				return mid;
 			}
 		}
+		return -1;
+	}
+
+	inline bool CSRMatrix::updateEntry(const int row, const int col, const real newValue) {
+		const int index = getValueIndex(row, col);
+		if(index != -1) {
+			values[index] = newValue;
+			return true;
+		}
 		return false;
+	}
+	inline real CSRMatrix::getValue(const int row, const int col) const {
+		const int index = getValueIndex(row, col);
+		if(index != -1) {
+			return values[index];
+		}
+		return real(0);
 	}
 
 	inline const int CSRMatrix::fillArrays(const TripletMatrix& triplet) noexcept {
