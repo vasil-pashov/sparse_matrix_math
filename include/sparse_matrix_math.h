@@ -646,6 +646,7 @@ namespace SMM {
 	class CSRMatrix {
 	public:
 		using ConstIterator = CSRConstIterator;
+		using ConstRowIterator = CSRConstIterator;
 
 		CSRMatrix() noexcept;
 		CSRMatrix(const TripletMatrix& triplet) noexcept;
@@ -687,11 +688,11 @@ namespace SMM {
 		/// Return an iterator to the beggining of a row.
 		/// @param[in] i The index of the row to which iterator will be given. Must be in range [0;denseRowCount]
 		/// @returns Iterator to the i-th row
-		ConstIterator rowBegin(const int i) const noexcept;
+		ConstRowIterator rowBegin(const int i) const noexcept;
 		/// Return an iterator one past the last element of a row. Dereferencing this iterator is undefined behavior
 		/// @param[in] i The row which end iterator will be given. Must be [0;denseRowCount]
 		/// @returns Iterator one past the last element of the i-th row. Dereferencing this is undefined behavior
-		ConstIterator rowEnd(const int i) const noexcept;
+		ConstRowIterator rowEnd(const int i) const noexcept;
 
 		/// @brief Perform matrix vector multiplication out = A * mult
 		/// Where A is the current CSR matrix
@@ -975,11 +976,11 @@ namespace SMM {
 		return ConstIterator(values.get(), positions.get(), start.get(), denseRowCount, start[denseRowCount]);
 	}
 
-	inline CSRMatrix::ConstIterator CSRMatrix::rowBegin(const int i) const noexcept {
+	inline CSRMatrix::ConstRowIterator CSRMatrix::rowBegin(const int i) const noexcept {
 		return ConstIterator(values.get(), positions.get(), start.get(), i, start[i]);
 	}
 
-	inline CSRMatrix::ConstIterator CSRMatrix::rowEnd(const int i) const noexcept {
+	inline CSRMatrix::ConstRowIterator CSRMatrix::rowEnd(const int i) const noexcept {
 		return ConstIterator(values.get(), positions.get(), start.get(), i + 1, start[i + 1]);
 	}
 
