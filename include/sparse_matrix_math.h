@@ -413,7 +413,7 @@ namespace SMM {
 	inline void _TripletMatrixCommon<Container>::addEntry(int row, int col, real value) {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
-		assert(col >= 0 && row < denseColCount);
+		assert(col >= 0 && col < denseColCount);
 		const uint64_t key = (uint64_t(row) << 32) | uint64_t(col);
 		auto it = data.find(key);
 		if (it == data.end()) {
@@ -427,7 +427,7 @@ namespace SMM {
 	inline bool _TripletMatrixCommon<Container>::updateEntry(const int row, const int col, const real newValue) {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
-		assert(col >= 0 && row < denseColCount);
+		assert(col >= 0 && col < denseColCount);
 		const uint64_t key = (uint64_t(row) << 32) | uint64_t(col);
 		auto it = data.find(key);
 		if(it != data.end()) {
@@ -441,7 +441,7 @@ namespace SMM {
 	inline real _TripletMatrixCommon<Container>::getValue(const int row, const int col) const {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
-		assert(col >= 0 && row < denseColCount);
+		assert(col >= 0 && col < denseColCount);
 		const uint64_t key = (uint64_t(row) << 32) | uint64_t(col);
 		auto it = data.find(key);
 		if(it == data.end()) {
