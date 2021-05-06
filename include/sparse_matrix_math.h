@@ -678,10 +678,21 @@ namespace SMM {
 		/// @param[in] other The matrix which will be checked against the current one
 		/// @returns True if the two matrices share the same nonzero pattern
 		bool hasSameNonZeroPattern(const CSRMatrix& other);
+
+		/// Iterator to the first element of the matrix
 		ConstIterator begin() const noexcept;
 		/// @brief Iterator to one element past the end of the matrix
 		/// It is undefined to dereference this iterator. Use it only in loop checks.
 		ConstIterator end() const noexcept;
+		/// Return an iterator to the beggining of a row.
+		/// @param[in] i The index of the row to which iterator will be given. Must be in range [0;denseRowCount]
+		/// @returns Iterator to the i-th row
+		ConstIterator rowBegin(const int i) const noexcept;
+		/// Return an iterator one past the last element of a row. Dereferencing this iterator is undefined behavior
+		/// @param[in] i The row which end iterator will be given. Must be [0;denseRowCount]
+		/// @returns Iterator one past the last element of the i-th row. Dereferencing this is undefined behavior
+		ConstIterator rowEnd(const int i) const noexcept;
+
 		/// @brief Perform matrix vector multiplication out = A * mult
 		/// Where A is the current CSR matrix
 		/// @param[in] mult The vector which will multiply the matrix to the right
@@ -962,6 +973,14 @@ namespace SMM {
 
 	inline CSRMatrix::ConstIterator CSRMatrix::end() const noexcept {
 		return ConstIterator(values.get(), positions.get(), start.get(), denseRowCount, start[denseRowCount]);
+	}
+
+	inline CSRMatrix::ConstIterator CSRMatrix::rowBegin(const int i) const noexcept {
+		return ConstIterator(values.get(), positions.get(), start.get(), i, start[i]);
+	}
+
+	inline CSRMatrix::ConstIterator CSRMatrix::rowEnd(const int i) const noexcept {
+		return ConstIterator(values.get(), positions.get(), start.get(), i + 1, start[i + 1]);
 	}
 
 	template<typename FunctorType>
