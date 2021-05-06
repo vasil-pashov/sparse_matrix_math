@@ -490,6 +490,7 @@ namespace SMM {
 		const int getCol() const noexcept;
 		friend void swap(CSRElement& a, CSRElement& b) noexcept;
 		friend class CSRConstIterator;
+		friend class CSRConstRowIterator;
 	protected:
 		CSRElement(
 			const real* values,
@@ -583,7 +584,7 @@ namespace SMM {
 		CSRConstIterator& operator++() noexcept;
 		CSRConstIterator operator++(int) noexcept;
 		friend void swap(CSRConstIterator& a, CSRConstIterator& b) noexcept;
-	private:
+	protected:
 		CSRElement currentElement;
 	};
 
@@ -634,6 +635,51 @@ namespace SMM {
 		swap(a.currentElement, b.currentElement);
 	}
 
+	class CSRConstRowIterator : public CSRConstIterator {
+	public:
+		CSRConstRowIterator(
+			const real* values,
+			const int* positions,
+			const int* start,
+			const int currentStartIndex,
+			const int currentPositionIndex
+		) noexcept;
+		CSRConstRowIterator& operator++() noexcept;
+		CSRConstRowIterator operator++(int) noexcept;
+		friend void swap(CSRConstRowIterator& a, CSRConstRowIterator& b) noexcept;
+	};
+
+	inline CSRConstRowIterator::CSRConstRowIterator(
+		const real* values,
+		const int* positions,
+		const int* start,
+		const int currentStartIndex,
+		const int currentPositionIndex
+	) noexcept :
+		CSRConstIterator(values, positions, start, currentStartIndex, currentPositionIndex)
+	{
+
+	}
+
+	inline CSRConstRowIterator& CSRConstRowIterator::operator++() noexcept {
+		currentElement.currentPositionIndex++;
+		assert(currentElement.currentPositionIndex <= currentElement.start[currentElement.currentStartIndex + 1]);
+		if (currentElement.currentPositionIndex == currentElement.start[currentElement.currentStartIndex + 1]) {
+			currentElement.currentStartIndex++;
+		}
+		return *this;
+	}
+
+	inline CSRConstRowIterator CSRConstRowIterator::operator++(int) noexcept {
+		CSRConstRowIterator initialState = *this;
+		++(*this);
+		return initialState;
+	}
+
+	inline void swap(CSRConstRowIterator& a, CSRConstRowIterator& b) noexcept {
+		swap(a.currentElement, b.currentElement);
+	}
+
 	enum class SolverPreconditioner {
 		NONE,
 		SYMMETRIC_GAUS_SEIDEL,
@@ -646,7 +692,7 @@ namespace SMM {
 	class CSRMatrix {
 	public:
 		using ConstIterator = CSRConstIterator;
-		using ConstRowIterator = CSRConstIterator;
+		using ConstRowIterator = CSRConstRowIterator;
 
 		CSRMatrix() noexcept;
 		CSRMatrix(const TripletMatrix& triplet) noexcept;
@@ -977,11 +1023,14 @@ namespace SMM {
 	}
 
 	inline CSRMatrix::ConstRowIterator CSRMatrix::rowBegin(const int i) const noexcept {
-		return ConstIterator(values.get(), positions.get(), start.get(), i, start[i]);
+		assert(i < denseRowCount);
+		return ConstRowIterator(values.get(), positions.get(), start.get(), i, start[i]);
 	}
 
 	inline CSRMatrix::ConstRowIterator CSRMatrix::rowEnd(const int i) const noexcept {
-		return ConstIterator(values.get(), positions.get(), start.get(), i + 1, start[i + 1]);
+		assert(i < denseRowCount);
+		if(start[i] == start[i+1]) return rowBegin(i);
+		return ConstRowIterator(values.get(), positions.get(), start.get(), i + 1, start[i + 1]);
 	}
 
 	template<typename FunctorType>
