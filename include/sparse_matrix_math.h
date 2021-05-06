@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <map>
+#include <unordered_map>
 #include <memory>
 #include <cassert>
 #include <utility>
@@ -197,8 +198,12 @@ namespace SMM {
 		int size;
 	};
 
+
+	template<typename Container>
 	class TripletEl {
-	friend class TripletMatrixConstIterator;
+
+	template<typename> friend class TripletMatrixConstIterator;
+
 	public:
 		TripletEl(const TripletEl&) noexcept = default;
 		TripletEl& operator=(const TripletEl& other) = default;
@@ -224,25 +229,30 @@ namespace SMM {
 
 		friend void swap(TripletEl& a, TripletEl& b) noexcept;
 	private:
-		TripletEl(std::map<uint64_t, real>::const_iterator it) : it(it) {
+		TripletEl(typename Container::const_iterator it) : it(it) {
 
 		}
 
-		std::map<uint64_t, real>::const_iterator it;
+		typename Container::const_iterator it;
 	};
 
-	inline void swap(TripletEl& a, TripletEl& b) noexcept {
+	template<typename Container>
+	inline void swap(TripletEl<Container>& a, TripletEl<Container>& b) noexcept {
 		using std::swap;
 		swap(a.it, b.it);
 	}
-	
+
+
+	template<typename Container>
 	class TripletMatrixConstIterator {
-	friend class TripletMatrix;
+	
+	template<typename> friend class _TripletMatrixCommon;
+
 	public:
 		using iterator_category = std::forward_iterator_tag;
-		using value_type = TripletEl;
-		using pointer = const TripletEl*;
-		using reference = const TripletEl&;
+		using value_type = TripletEl<Container>;
+		using pointer = const TripletEl<Container>*;
+		using reference = const TripletEl<Container>&;
 
 		TripletMatrixConstIterator& operator=(const TripletMatrixConstIterator&) = default;
 
@@ -273,13 +283,14 @@ namespace SMM {
 			return initialState;
 		}
 
-		friend void swap(TripletMatrixConstIterator& a, TripletMatrixConstIterator& b) noexcept;
+		template<typename> friend void swap(TripletMatrixConstIterator& a, TripletMatrixConstIterator& b) noexcept;
 	private:
-		TripletMatrixConstIterator(std::map<uint64_t, real>::const_iterator it) : currentEl(it) {}
-		TripletEl currentEl;
+		TripletMatrixConstIterator(typename Container::const_iterator it) : currentEl(it) {}
+		TripletEl<Container> currentEl;
 	};
 
-	inline void swap(TripletMatrixConstIterator& a, TripletMatrixConstIterator& b) noexcept {
+	template<typename Container>
+	inline void swap(TripletMatrixConstIterator<Container>& a, TripletMatrixConstIterator<Container>& b) noexcept {
 		swap(a.currentEl, b.currentEl);
 	}
 
@@ -290,15 +301,16 @@ namespace SMM {
 	/// increase the count of non zero elements. This class is supposed to be used as intermediate class to add
 	/// entries dynamically. After all data is gathered it should be converted to CSRMatrix which provides
 	/// various arithmetic functions.
-	class TripletMatrix {
+	template<typename Container>
+	class _TripletMatrixCommon {
 	public:
-		using ConstIterator = TripletMatrixConstIterator;
-		TripletMatrix();
+		using ConstIterator = TripletMatrixConstIterator<Container>;
+		_TripletMatrixCommon();
 		/// @brief Initialize triplet matrix with given number of rows and columns
 		/// The number of rows and columns does not have any affect the space allocated by the matrix
 		/// @param[in] rowCount Number of rows which the dense form of the matrix is supposed to have
 		/// @param[in] colCount Number of columns which the dense form of the matrix is supposed to have
-		TripletMatrix(int rowCount, int colCount) noexcept;
+		_TripletMatrixCommon(int rowCount, int colCount) noexcept;
 		/// @brief Initialize triplet matrix with given number of rows and columns and allocate space for the elements of the matrix
 		/// Note that this constructor only allocates space but does not initialize the elements, nor it changes the number of non zero elements,
 		/// thus the number of non zero elements will be 0 after the constructor is called.
@@ -306,12 +318,12 @@ namespace SMM {
 		/// @param[in] rowCount Number of rows which the dense form of the matrix is supposed to have
 		/// @param[in] colCount Number of columns which the dense form of the matrix is supposed to have
 		/// @param[in] numTriplets How many elements to allocate space for.
-		TripletMatrix(int rowCount, int colCount, int numTriplets) noexcept;
-		~TripletMatrix() = default;
-		TripletMatrix(TripletMatrix&&) = default;
-		TripletMatrix& operator=(TripletMatrix&&) = default;
-		TripletMatrix(const TripletMatrix&) = delete;
-		TripletMatrix& operator=(const TripletMatrix&) = delete;
+		_TripletMatrixCommon(int rowCount, int colCount, int numTriplets) noexcept;
+		~_TripletMatrixCommon() = default;
+		_TripletMatrixCommon(_TripletMatrixCommon&&) = default;
+		_TripletMatrixCommon& operator=(_TripletMatrixCommon&&) = default;
+		_TripletMatrixCommon(const _TripletMatrixCommon&) = delete;
+		_TripletMatrixCommon& operator=(const _TripletMatrixCommon&) = delete;
 		/// @brief Initialize triplet matrix.
 		/// Be sure to call this on empty matrices (either created via the default constructor or after calling deinit())
 		/// @param[in] rowCount Number of rows which the dense form of the matrix is supposed to have
@@ -360,39 +372,45 @@ namespace SMM {
 		/// @brief Keep track of repeating indexes
 		/// Key is unique representation of the matrix index (first 32 bits are the col second are the row)
 		/// The value is index into the data array of triplets where the element is
-		std::map<uint64_t, real> data;
+		Container data;
 		int denseRowCount; ///< Number of rows in the matrix  
 		int denseColCount; ///< Number of columns in the matrix
 	};
 
-	inline TripletMatrix::TripletMatrix() :
+	template<typename Container>
+	inline _TripletMatrixCommon<Container>::_TripletMatrixCommon() :
 		denseRowCount(0),
 		denseColCount(0)
 	{ }
 
-	inline TripletMatrix::TripletMatrix(int denseRowCount, int denseColCount) noexcept :
+	template<typename Container>
+	inline _TripletMatrixCommon<Container>::_TripletMatrixCommon(int denseRowCount, int denseColCount) noexcept :
 		denseRowCount(denseRowCount),
 		denseColCount(denseColCount)
 	{ }
 
-	inline TripletMatrix::TripletMatrix(int denseRowCount, int denseColCount, int numTriplets) noexcept :
+	template<typename Container>
+	inline _TripletMatrixCommon<Container>::_TripletMatrixCommon(int denseRowCount, int denseColCount, int numTriplets) noexcept :
 		denseRowCount(denseRowCount),
 		denseColCount(denseColCount)
 	{ }
 
-	inline void TripletMatrix::init(const int denseRowCount, const int denseColCount, const int numTriplets) {
+	template<typename Container>
+	inline void _TripletMatrixCommon<Container>::init(const int denseRowCount, const int denseColCount, const int numTriplets) {
 		assert(getNonZeroCount() == 0 && getDenseRowCount() == 0 && getDenseColCount() == 0);
 		this->denseRowCount = denseRowCount;
 		this->denseColCount = denseColCount;
 	}
 
-	inline void TripletMatrix::deinit() {
+	template<typename Container>
+	inline void _TripletMatrixCommon<Container>::deinit() {
 		denseRowCount = 0;
 		denseColCount = 0;
 		data.clear();
 	}
 
-	inline void TripletMatrix::addEntry(int row, int col, real value) {
+	template<typename Container>
+	inline void _TripletMatrixCommon<Container>::addEntry(int row, int col, real value) {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
 		assert(col >= 0 && row < denseColCount);
@@ -405,7 +423,8 @@ namespace SMM {
 		}
 	}
 
-	inline bool TripletMatrix::updateEntry(const int row, const int col, const real newValue) {
+	template<typename Container>
+	inline bool _TripletMatrixCommon<Container>::updateEntry(const int row, const int col, const real newValue) {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
 		assert(col >= 0 && row < denseColCount);
@@ -418,7 +437,8 @@ namespace SMM {
 		return false;
 	}
 
-	inline real TripletMatrix::getValue(const int row, const int col) const {
+	template<typename Container>
+	inline real _TripletMatrixCommon<Container>::getValue(const int row, const int col) const {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
 		assert(col >= 0 && row < denseColCount);
@@ -430,25 +450,33 @@ namespace SMM {
 		return it->second;
 	}
 
-	inline TripletMatrix::ConstIterator TripletMatrix::begin() const noexcept {
+	template<typename Container>
+	inline typename _TripletMatrixCommon<Container>::ConstIterator _TripletMatrixCommon<Container>::begin() const noexcept {
 		return ConstIterator(data.cbegin());
 	}
 
-	inline TripletMatrix::ConstIterator TripletMatrix::end() const noexcept {
+	template<typename Container>
+	inline typename _TripletMatrixCommon<Container>::ConstIterator _TripletMatrixCommon<Container>::end() const noexcept {
 		return ConstIterator(data.cend());
 	}
 
-	inline int TripletMatrix::getNonZeroCount() const noexcept {
+	template<typename Container>
+	inline int _TripletMatrixCommon<Container>::getNonZeroCount() const noexcept {
 		return data.size();
 	}
 
-	inline int TripletMatrix::getDenseRowCount() const noexcept {
+	template<typename Container>
+	inline int _TripletMatrixCommon<Container>::getDenseRowCount() const noexcept {
 		return denseRowCount;
 	}
 
-	inline int TripletMatrix::getDenseColCount() const noexcept {
+	template<typename Container>
+	inline int _TripletMatrixCommon<Container>::getDenseColCount() const noexcept {
 		return denseColCount;
 	}
+
+	using TripletMatrix = _TripletMatrixCommon<std::map<uint64_t, real>>;
+	using UnorderedTripletMatrix = _TripletMatrixCommon<std::unordered_map<uint64_t, real>>;
 
 	enum CSFormat {
 		CSR, ///< (C)ompressed (S)parse (R)ow
