@@ -413,7 +413,7 @@ namespace SMM {
 	inline void _TripletMatrixCommon<Container>::addEntry(int row, int col, real value) {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
-		assert(col >= 0 && row < denseColCount);
+		assert(col >= 0 && col < denseColCount);
 		const uint64_t key = (uint64_t(row) << 32) | uint64_t(col);
 		auto it = data.find(key);
 		if (it == data.end()) {
@@ -427,7 +427,7 @@ namespace SMM {
 	inline bool _TripletMatrixCommon<Container>::updateEntry(const int row, const int col, const real newValue) {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
-		assert(col >= 0 && row < denseColCount);
+		assert(col >= 0 && col < denseColCount);
 		const uint64_t key = (uint64_t(row) << 32) | uint64_t(col);
 		auto it = data.find(key);
 		if(it != data.end()) {
@@ -441,7 +441,7 @@ namespace SMM {
 	inline real _TripletMatrixCommon<Container>::getValue(const int row, const int col) const {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
-		assert(col >= 0 && row < denseColCount);
+		assert(col >= 0 && col < denseColCount);
 		const uint64_t key = (uint64_t(row) << 32) | uint64_t(col);
 		auto it = data.find(key);
 		if(it == data.end()) {
@@ -490,6 +490,7 @@ namespace SMM {
 		const int getCol() const noexcept;
 		friend void swap(CSRElement& a, CSRElement& b) noexcept;
 		friend class CSRConstIterator;
+		friend class CSRConstRowIterator;
 	protected:
 		CSRElement(
 			const real* values,
@@ -583,7 +584,7 @@ namespace SMM {
 		CSRConstIterator& operator++() noexcept;
 		CSRConstIterator operator++(int) noexcept;
 		friend void swap(CSRConstIterator& a, CSRConstIterator& b) noexcept;
-	private:
+	protected:
 		CSRElement currentElement;
 	};
 
@@ -634,6 +635,51 @@ namespace SMM {
 		swap(a.currentElement, b.currentElement);
 	}
 
+	class CSRConstRowIterator : public CSRConstIterator {
+	public:
+		CSRConstRowIterator(
+			const real* values,
+			const int* positions,
+			const int* start,
+			const int currentStartIndex,
+			const int currentPositionIndex
+		) noexcept;
+		CSRConstRowIterator& operator++() noexcept;
+		CSRConstRowIterator operator++(int) noexcept;
+		friend void swap(CSRConstRowIterator& a, CSRConstRowIterator& b) noexcept;
+	};
+
+	inline CSRConstRowIterator::CSRConstRowIterator(
+		const real* values,
+		const int* positions,
+		const int* start,
+		const int currentStartIndex,
+		const int currentPositionIndex
+	) noexcept :
+		CSRConstIterator(values, positions, start, currentStartIndex, currentPositionIndex)
+	{
+
+	}
+
+	inline CSRConstRowIterator& CSRConstRowIterator::operator++() noexcept {
+		currentElement.currentPositionIndex++;
+		assert(currentElement.currentPositionIndex <= currentElement.start[currentElement.currentStartIndex + 1]);
+		if (currentElement.currentPositionIndex == currentElement.start[currentElement.currentStartIndex + 1]) {
+			currentElement.currentStartIndex++;
+		}
+		return *this;
+	}
+
+	inline CSRConstRowIterator CSRConstRowIterator::operator++(int) noexcept {
+		CSRConstRowIterator initialState = *this;
+		++(*this);
+		return initialState;
+	}
+
+	inline void swap(CSRConstRowIterator& a, CSRConstRowIterator& b) noexcept {
+		swap(a.currentElement, b.currentElement);
+	}
+
 	enum class SolverPreconditioner {
 		NONE,
 		SYMMETRIC_GAUS_SEIDEL,
@@ -646,6 +692,7 @@ namespace SMM {
 	class CSRMatrix {
 	public:
 		using ConstIterator = CSRConstIterator;
+		using ConstRowIterator = CSRConstRowIterator;
 
 		CSRMatrix() noexcept;
 		CSRMatrix(const TripletMatrix& triplet) noexcept;
@@ -687,11 +734,11 @@ namespace SMM {
 		/// Return an iterator to the beggining of a row.
 		/// @param[in] i The index of the row to which iterator will be given. Must be in range [0;denseRowCount]
 		/// @returns Iterator to the i-th row
-		ConstIterator rowBegin(const int i) const noexcept;
+		ConstRowIterator rowBegin(const int i) const noexcept;
 		/// Return an iterator one past the last element of a row. Dereferencing this iterator is undefined behavior
 		/// @param[in] i The row which end iterator will be given. Must be [0;denseRowCount]
 		/// @returns Iterator one past the last element of the i-th row. Dereferencing this is undefined behavior
-		ConstIterator rowEnd(const int i) const noexcept;
+		ConstRowIterator rowEnd(const int i) const noexcept;
 
 		/// @brief Perform matrix vector multiplication out = A * mult
 		/// Where A is the current CSR matrix
@@ -975,12 +1022,15 @@ namespace SMM {
 		return ConstIterator(values.get(), positions.get(), start.get(), denseRowCount, start[denseRowCount]);
 	}
 
-	inline CSRMatrix::ConstIterator CSRMatrix::rowBegin(const int i) const noexcept {
-		return ConstIterator(values.get(), positions.get(), start.get(), i, start[i]);
+	inline CSRMatrix::ConstRowIterator CSRMatrix::rowBegin(const int i) const noexcept {
+		assert(i < denseRowCount);
+		return ConstRowIterator(values.get(), positions.get(), start.get(), i, start[i]);
 	}
 
-	inline CSRMatrix::ConstIterator CSRMatrix::rowEnd(const int i) const noexcept {
-		return ConstIterator(values.get(), positions.get(), start.get(), i + 1, start[i + 1]);
+	inline CSRMatrix::ConstRowIterator CSRMatrix::rowEnd(const int i) const noexcept {
+		assert(i < denseRowCount);
+		if(start[i] == start[i+1]) return rowBegin(i);
+		return ConstRowIterator(values.get(), positions.get(), start.get(), i + 1, start[i + 1]);
 	}
 
 	template<typename FunctorType>
