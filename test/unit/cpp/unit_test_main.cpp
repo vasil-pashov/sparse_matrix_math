@@ -232,6 +232,47 @@ TEST(CSRMatrix, DirectAccessors) {
 		EXPECT_NEAR(dense[i], denseRef[i], 10e-6);
 	}
 }
+TEST(CSRMatrix, RowIterators) {
+	const int numRows = 4;
+	const int numCols = 4;
+	const int numElements = 10;
+	SMM::TripletMatrix triplet(numRows, numCols, numElements);
+	const int denseSize = numRows * numCols;
+	const SMM::real denseRef[denseSize] = {
+		4.5f, 0.0f, 3.2f, 0.0f,
+		3.1f, 2.9f, 0.0f, 0.9f,
+		0.0f, 1.7f, 3.0f, 0.0f,
+		3.5f, 0.4f, 0.0f, 1.0f
+	};
+	int numElementsInRow[]= {2,3,2,3};
+
+	triplet.addEntry(0, 0, 4.5f);
+	triplet.addEntry(0, 2, 3.2f);
+	triplet.addEntry(1, 0, 3.1f);
+	triplet.addEntry(1, 1, 2.9f);
+	triplet.addEntry(1, 3, 0.9f);
+	triplet.addEntry(2, 1, 1.7f);
+	triplet.addEntry(2, 2, 3.0f);
+	triplet.addEntry(3, 0, 3.5f);
+	triplet.addEntry(3, 1, 0.4f);
+	triplet.addEntry(3, 3, 1.0f);
+
+	SMM::CSRMatrix m;
+	m.init(triplet);
+
+	for(int i = 0; i < 4; ++i) {
+		int numElements = 0;
+		SMM::CSRMatrix::ConstIterator current = m.rowBegin(i);
+		SMM::CSRMatrix::ConstIterator rowEnd = m.rowEnd(i);
+		while(current != rowEnd) {
+			EXPECT_EQ(current->getValue(), denseRef[current->getRow() * numCols + current->getCol()]);
+			numElements++;
+			++current;
+		}
+		EXPECT_EQ(numElements, numElementsInRow[i]);
+	}
+
+}
 
 
 template <typename CSMatrix_t>
