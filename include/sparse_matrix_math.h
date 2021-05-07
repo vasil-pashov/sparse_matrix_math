@@ -937,6 +937,10 @@ namespace SMM {
 			const bool async
 		) const noexcept;
 		#endif
+
+		static real vectorMultFunctor([[maybe_unused]]const real lhs, const real rhs) {
+			return rhs;
+		}
 	};
 
 	inline CSRMatrix::CSRMatrix() noexcept :
@@ -1040,40 +1044,43 @@ namespace SMM {
 		real* const out,
 		const FunctorType& op
 	) const noexcept {
+		int prevRow = 0;
 		for (int row = firstActiveStart; row < denseRowCount; row = getNextStartIndex(row, denseRowCount)) {
 			real dot = 0.0f;
+			// Handles the case when rows are missing from the matrix
+			// Makes sense only for vector multiplication as when there is addition or subtraction
+			// the out vector holds the correct result
+			if constexpr(std::is_same_v<decltype(op), decltype(vectorMultFunctor)>) {
+				for(int i = prevRow; i < row; ++i) {
+					out[i] = op(lhs[row], real(0));
+				}
+			}
+
+			// Does the regular operation
 			for (int colIdx = start[row]; colIdx < start[row + 1]; ++colIdx) {
 				const int col = positions[colIdx];
 				const real val = values[colIdx];
 				dot = _smm_fma(val, mult[col], dot);
 			}
 			out[row] = op(lhs[row], dot);
+			// Add one to exclude the row which was just processed
+			prevRow = row + 1;
 		}
 	}
 
 	inline void CSRMatrix::rMult(const real* const mult, real* const res) const noexcept {
 		assert(mult != res);
-		auto rhsId = [](const real lhs, const  real rhs) -> real {
-			return rhs;
-		};
-		rMultOp(res, mult, res, rhsId);
+		rMultOp(res, mult, res, vectorMultFunctor);
 	}
 
 	inline void CSRMatrix::rMultAdd(const real* const lhs, const real* const mult, real* const out) const noexcept {
-		auto addOp = [](const real lhs, const real rhs) ->real {
-			return lhs + rhs;
-		};
-		rMultOp(lhs, mult, out, addOp);
+		rMultOp(lhs, mult, out, [](const real lhs, const real rhs) { return lhs + rhs;});
 	}
-
 
 	inline void CSRMatrix::rMultSub(const real* const lhs, const real* const mult, real* const out) const noexcept {
-		auto addOp = [](const real lhs, const real rhs) ->real {
-			return lhs - rhs;
-		};
-		rMultOp(lhs, mult, out, addOp);
+		rMultOp(lhs, mult, out, [](const real lhs, const real rhs) { return lhs - rhs;});
 	}
-
+ 
 
 // ********************************************************************
 // *********** MULTITHREADED VARIANTS OF MATRIX FUNCTIONS *************
@@ -1093,14 +1100,26 @@ namespace SMM {
 			const int startIdx = blockSize * blockIndex;
 			const int end = std::min(denseRowCount, startIdx + blockSize);
 			const int start = startIdx == 0 ? firstActiveStart : getNextStartIndex(startIdx - 1, denseRowCount);
+			int prevRow = startIdx;
 			for (int row = start; row < end; row = getNextStartIndex(row, denseRowCount)) {
 				real dot = 0.0f;
+				// Handles the case when rows are missing from the matrix
+				// Makes sense only for vector multiplication as when there is addition or subtraction
+				// the out vector holds the correct result
+				if constexpr(std::is_same_v<decltype(op), decltype(vectorMultFunctor)>) {
+					for(int i = prevRow; i < row; ++i) {
+						out[i] = op(lhs[row], real(0));
+					}
+				}
+				// Does the regular operation
 				for (int colIdx = this->start[row]; colIdx < this->start[row + 1]; ++colIdx) {
 					const int col = positions[colIdx];
 					const real val = values[colIdx];
 					dot = _smm_fma(val, mult[col], dot);
 				}
 				out[row] = op(lhs[row], dot);
+				// Add one to exclude the row which was just processed
+				prevRow = row + 1;
 			}
 		};
 		if (async) {
