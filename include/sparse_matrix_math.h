@@ -149,7 +149,7 @@ namespace SMM {
 		}
 
 		const real secondNormSquared() const {
-			real sum = 0.0f;
+			real sum(0);
 			for (int i = 0; i < size; ++i) {
 				sum += data[i] * data[i];
 			}
@@ -158,7 +158,7 @@ namespace SMM {
 
 		const real operator*(const Vector& other) const {
 			assert(other.size == size);
-			real dot = 0.0f;
+			real dot(0);
 			for (int i = 0; i < size; ++i) {
 				dot += other[i] * data[i];
 			}
@@ -1768,10 +1768,10 @@ namespace SMM {
 		real eps
 	) {
 		const int rows = a.getDenseRowCount();
-		Vector r(rows);
+		Vector r(rows, real(0));
 		a.rMultSub(b, x, r);
 
-		Vector p(rows), Ap(rows);
+		Vector p(rows), Ap(rows, real(0));
 		for(int i = 0; i < rows; ++i) {
 			p[i] = r[i];
 		}
@@ -1784,7 +1784,7 @@ namespace SMM {
 			a.rMult(p, Ap);
 			const real pAp = Ap * p;
 			// If the denominator is 0 we have a lucky breakdown. The residual at the previous step must be 0.
-			if(eps > pAp) {
+			if(eps > std::abs(pAp)) {
 				return SolverStatus::SUCCESS;
 			}
 			// alpha = (r_i, r_i) / (Ap, p)
