@@ -354,7 +354,7 @@ TYPED_TEST(CSMatrixToLinearRowMajor, ToLinearDenseRowMajor) {
 template <typename CSMatrix_t>
 class CSMatrixRMultOp : public testing::Test {
 protected:
-	static const int numRows = 4;
+	static const int numRows = 5;
 	static const int numCols = 4;
 	static const int numElements = 10;
 	SMM::TripletMatrix triplet;
@@ -431,7 +431,7 @@ TYPED_TEST(CSMatrixRMultAdd, MultZero) {
 TYPED_TEST(CSMatrixRMultAdd, Basic) {
 	const int numRows = CSMatrixRMultOp<TypeParam>::numRows;
 	SMM::real mult[numRows] = { 1,0,3,4 };
-	SMM::real add[numRows] = { 5,6,7,8 };
+	SMM::real add[numRows] = { 5,6,7,8,10 };
 	const SMM::real resRef[numRows] = { 19.1, 12.7, 16., 15.5 };
 	CSMatrixRMultOp<TypeParam>::m.rMultAdd(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
@@ -494,7 +494,7 @@ TYPED_TEST(CSMatrixRMultSub, MultZero) {
 TYPED_TEST(CSMatrixRMultSub, Basic) {
 	const int numRows = CSMatrixRMultSub<TypeParam>::numRows;
 	SMM::real mult[numRows] = { 1,0,3,4 };
-	SMM::real add[numRows] = { 5,6,7,8 };
+	SMM::real add[numRows] = { 5,6,7,8,10 };
 	const SMM::real resRef[numRows] = { -9.1, -0.7, -2., 0.5 };
 	CSMatrixRMultSub<TypeParam>::m.rMultSub(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
