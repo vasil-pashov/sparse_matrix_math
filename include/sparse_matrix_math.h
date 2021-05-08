@@ -1837,7 +1837,7 @@ namespace SMM {
 			a.rMult(p, Ap);
 			const real pAp = Ap * p;
 			// If the denominator is 0 we have a lucky breakdown. The residual at the previous step must be 0.
-			if(eps > std::abs(pAp)) {
+			if(pAp == 0) {
 				return SolverStatus::SUCCESS;
 			}
 			// alpha = (r_i, r_i) / (Ap, p)
