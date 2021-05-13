@@ -912,7 +912,7 @@ namespace SMM {
 			IC0Preconditioner(const IC0Preconditioner&) = delete;
 			IC0Preconditioner& operator=(const IC0Preconditioner&) = delete;
 			IC0Preconditioner(IC0Preconditioner&&) = default;
-			IC0Preconditioner& operator=(IC0Preconditioner&&) = default;
+			int init() noexcept;
 		private:
 			int factorize() noexcept;
 			const CSRMatrix& m;
@@ -1464,14 +1464,18 @@ namespace SMM {
 		return 0;
 	}
 
-	inline CSRMatrix::IC0Preconditioner::IC0Preconditioner(const CSRMatrix& m) :
+	inline CSRMatrix::IC0Preconditioner::IC0Preconditioner(const CSRMatrix& m) noexcept :
 		m(m)
 	{}
 
-	inline int CSRMatrix::IC0Preconditioner::factorize() {
+	inline int CSRMatrix::IC0Preconditioner::init() noexcept {
+		return factorize();
+	}
+
+	inline int CSRMatrix::IC0Preconditioner::factorize() noexcept {
 		const int nnz = m.getNonZeroCount();
 		const int rows = m.getDenseRowCount();
-		assert(rows == getDenseColCount());
+		assert(rows == m.getDenseColCount());
 		ic0Val.reset(new real[nnz]);
 		// For each row this will be an offset to where we can put a value. For the i-th element we have that
 		// nextFreeSlot[i] >= 0 && nextFreeSlot[i] < CSRMatrix::start[i + 1] - CSRMatrix::start[i] i.e. the i-th elements is
@@ -1497,7 +1501,7 @@ namespace SMM {
 			int columnIndex = m.start[i];
 			int column = m.positions[columnIndex];
 			while(column < i) {
-				diagonalElement -= m.values[columnIndex] * m.values[columnIndex];
+				diagonalElement += ic0Val[columnIndex] * ic0Val[columnIndex];
 				columnIndex++;
 				column = m.positions[columnIndex];
 			}
@@ -1505,8 +1509,11 @@ namespace SMM {
 				assert(false && "The matrix is not positive definite");
 				return 1;
 			}
-			diagonalElement = std::sqrt(m.values[columnIndex] + diagonalElement);
-			ic0Val[nextFreeSlot[i]] = diagonalElement;
+			assert(m.values[columnIndex] - diagonalElement > 0 && "The matrix is not positive definite");
+			diagonalElement = std::sqrt(m.values[columnIndex] - diagonalElement);
+			assert(std::abs(diagonalElement) > 1e-6 && "The diagonal element is 0. The matrix is not possitive definite.");
+			const int diagonalPosition = m.start[i] + nextFreeSlot[i];
+			ic0Val[diagonalPosition] = diagonalElement;
 			nextFreeSlot[i]++;
 			const real diagonalIversed = real(1) / diagonalElement;
 			
@@ -1541,7 +1548,8 @@ namespace SMM {
 				// CSRMatrix::values
 				sum = (m.values[k] - sum) * diagonalIversed;
 				ic0Val[k] = sum;
-				ic0Val[m.start[i] + nextFreeSlot[i]] = sum;
+				const int uppertTriangularPosition = m.start[i] + nextFreeSlot[i];
+				ic0Val[uppertTriangularPosition] = sum;
 				nextFreeSlot[i]++;
 				nextFreeSlot[j]++;
 			}
@@ -1551,6 +1559,7 @@ namespace SMM {
 				usedColumns[col] = -1;
 			}
 		}
+		return 0;
 	}
 
 	inline void saveDenseText(const char* filepath, const CSRMatrix& m) {
