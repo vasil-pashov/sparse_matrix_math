@@ -912,7 +912,15 @@ namespace SMM {
 			IC0Preconditioner(const IC0Preconditioner&) = delete;
 			IC0Preconditioner& operator=(const IC0Preconditioner&) = delete;
 			IC0Preconditioner(IC0Preconditioner&&) = default;
+			/// This will do the actual factorization of the matrix passed to the class in the constructor
 			int init() noexcept;
+			/// @brief Apply the Incomplete Cholesky preconditioner to a vector.
+			/// The procedure solves the system of equations M.x = rhs <=> x = Inverse(M).rhs
+			/// Solving the system takes O(M.getDenseRowCount()) (time proportional to the number of dense)
+			/// @param[in] rhs Vector which will be preconditioned
+			/// @param[out] x The result of preconditioning rhs
+			/// @retval Non zero on error
+			int apply(const real* rhs, real* x) const noexcept;
 		private:
 			int factorize() noexcept;
 			const CSRMatrix& m;
@@ -1472,6 +1480,42 @@ namespace SMM {
 		return factorize();
 	}
 
+	inline int CSRMatrix::IC0Preconditioner::apply(const real* rhs, real* x) const noexcept {
+		const int rows = m.getDenseRowCount();
+		// Solve L.y = rhs, y = Transpose(L).x
+		for(int row = 0; row < rows; ++row) {
+			real sum = rhs[row];
+			const int rowStart = m.start[row];
+			const int rowEnd = m.start[row+1];
+			int j = rowStart;
+			int col = m.positions[j];
+			while(col < row && j < rowEnd) {
+				sum -= ic0Val[j] * x[col];
+				j++;
+				col = m.positions[j];
+			}
+			assert(col == row && "Missing diagonal element. This means that the original matrix was not SPD.");
+			x[row] = sum / ic0Val[j];
+		}
+
+		// Solve Transpose(L).x = y
+		for(int row = rows - 1; row >= 0; --row) {
+			real sum = x[row];
+			const int rowStart = m.start[row];
+			const int rowEnd = m.start[row+1];
+			int j = rowEnd - 1;
+			int col = m.positions[j];
+			while(col > row && j >= rowStart) {
+				sum -= ic0Val[j] * x[col];
+				j--;
+				col = m.positions[j];
+			}
+			assert(col == row && "Missing diagonal element. This means that the original matrix was not SPD.");
+			x[row] = sum / ic0Val[j];
+		}
+		return 0;
+	}
+
 	inline int CSRMatrix::IC0Preconditioner::factorize() noexcept {
 		const int nnz = m.getNonZeroCount();
 		const int rows = m.getDenseRowCount();
@@ -1933,6 +1977,15 @@ namespace SMM {
 		int maxIterations,
 		real eps
 	) {
+		// The algorithm in pseudo code is as follows:
+		// 1. r_0 = b - A.x_0
+		// 2. p_0 = r_0
+		// 3. for j = 0, j, ... until convergence/max iteratoions
+		// 4.	alpha_i = (r_j, r_j) / (A.p_j, p_j)
+		// 5.	x_{j+1} = x_j + alpha_j * p_j
+		// 6.	r_{j+1} = r_j - alpha_j * A.p_j
+		// 7. 	beta_j = (r_{j+1}, r_{j+1}) / (r_j, r_j)
+		// 8.	p_{j+1} = r_{j+1} + beta_j * p_j
 		const int rows = a.getDenseRowCount();
 		Vector r(rows, real(0));
 		a.rMultSub(b, x, r);
@@ -1957,11 +2010,12 @@ namespace SMM {
 			const real alpha = residualNormSquared / pAp;
 			// x = x + alpha * p
 			// r = r - alpha * Ap
+			real newResidualNormSquared = 0;
 			for(int j = 0; j < rows; ++j) {
 				x[j] = _smm_fma(alpha, p[j], x[j]);
 				r[j] = _smm_fma(-alpha, Ap[j], r[j]);
+				newResidualNormSquared += r[j] * r[j];
 			}
-			const real newResidualNormSquared = r * r;
 			// beta = (r_{i+1}, r_(i+1)) / (r_i, r_i)
 			const real beta = newResidualNormSquared / residualNormSquared;
 			// p = r + beta * p
@@ -1974,6 +2028,94 @@ namespace SMM {
 			}
 		}
 		return SolverStatus::MAX_ITERATIONS_REACHED;
+	}
+
+	/// Preconditioned version of the Conjugate Gradient method. With Incomplete Cholesky preconditioner
+	/// The preconditioner is given in the form L*Transpose(L). This is a separate algorithm, since IC0,
+	/// is symmetric and we can utilize this property in the solver
+	/// Matrix a should be symmetric positive definite matrix. 
+	/// @param[in] a Coefficient matrix for the system of equations
+	/// @param[in] b Right hand side for the system of equations
+	/// @param[in,out] x Initial condition, the result will be written here too
+	/// @param[in] maxIterations Iterations threshold for the method.
+	/// If convergence was not reached for less than maxIterations the method will exit.
+	/// If maxIterations is -1 the method will do all possible iterations (the same as the number of rows in the matrix)
+	/// @param[in] eps Required size of the L2 norm of the residual
+	/// @param[in] preconditioner Incomplete Cholesky preconditioner which will be used precondition this system.
+	/// @return SolverStatus the status the solved system
+	inline SolverStatus ConjugateGradient(
+		const CSRMatrix& a,
+		real* b,
+		real* x,
+		int maxIterations,
+		real eps,
+		const CSRMatrix::IC0Preconditioner& M
+	) {
+		// Pseudo code for the algorithm:
+		// 1. r_0 = b - A.x_0
+		// 2. z_0 = Inverse(M).r_0
+		// 3. p_0 = z_0
+		// 4. for j = 0, 1, ... until convergence/max iterations
+		// 5.	alpha_j = (r_j, z_j) / (A.p_j, p_j)
+		// 6.	x_{j+1} = x_j + alpha_j * p_j
+		// 7.	r_{j+1} = r_j - alpha_j * A.p_j
+		// 8.	z_{j+1} = Inverse(M).r_{j+1}
+		// 9.	beta_j = (r_{j+1}, z_{j+1}) / (r_j, z_j)
+		// 10.	p_{j+1} = z_{j+1} + beta_j * p_j
+		const int rows = a.getDenseRowCount();
+		assert(
+			rows == a.getDenseColCount() && 
+			"The matrix has different row and col count."
+			"In order to use PCG we need symmetric, positive definite matrix"
+		);
+		Vector r(rows, 0);
+		Vector z(rows, 0);
+		Vector p(rows, 0);
+		a.rMultSub(b, x, r);
+		M.apply(r, z);
+		real rz = 0;
+		for(int i = 0; i < rows; ++i) {
+			rz += r[i] * z[i];
+			p[i] = z[i];
+		}
+		if(maxIterations == -1) {
+			maxIterations = rows;
+		}
+		Vector Ap(rows, 0);
+		const real epsSq = eps * eps;
+		for(int i = 0; i < maxIterations; ++i) {
+			a.rMult(p, Ap);
+			const real pAp = Ap * p;
+			// If the denominator is 0 we have a lucky breakdown. The residual at the previous step must be 0.
+			if(std::abs(pAp) < eps) {
+				return SolverStatus::SUCCESS;
+			}
+			// alpha_j = (r_j, z_j) / (A.p_j, p_j)
+			const real alpha = rz / pAp;
+			// x_{j+1} = x_j + alpha_j * p_j
+			// r_{j+1} = r_j - alpha_j * A.p_j
+			for(int j = 0; j < rows; ++j) {
+				x[j] = _smm_fma(alpha, p[j], x[j]);
+				r[j] = _smm_fma(-alpha, Ap[j], r[j]);
+			}
+			M.apply(r, z);
+			real newRZ = 0;
+			real residualNormSq = 0;
+			for(int j = 0; j < rows; ++j) {
+				newRZ += r[j] * z[j];
+				residualNormSq += r[j] * r[j];
+			}
+			if(residualNormSq < epsSq) {
+				return SMM::SolverStatus::SUCCESS;
+			}
+			const real beta = newRZ / rz;
+			// p_{j+1} = z_{j+1} + beta_j * p_j
+			for(int j = 0; j < rows; ++j) {
+				p[j] = _smm_fma(beta, p[j], z[j]);
+			}
+			rz = newRZ;
+		}
+		return SMM::SolverStatus::MAX_ITERATIONS_REACHED;
 	}
 	
 	enum class MatrixLoadStatus {

@@ -23,7 +23,7 @@ TEST_F(CG, mesh1em6_structural_48_48_177) {
 	SumRowTest(path.c_str());
 }
 
-TEST(PCG, IC0) {
+TEST(PCG, TestApplyIC0) {
 	const int size = 5;
 	const SMM::real denseRef[size][size] = {
 		{10, 0, 0 , 4 , 0},
@@ -46,4 +46,12 @@ TEST(PCG, IC0) {
 	SMM::CSRMatrix::IC0Preconditioner ic0(m);
 	int error = ic0.init();
 	ASSERT_EQ(error, 0);
+	SMM::real rhs[size];
+	std::fill_n(rhs, size, 1);
+	SMM::real res[size];
+	SMM::real resRef[size] = {0.0995763, 0.0646186, 0.0833333, 0.0010593, 0.0836864};
+	ic0.apply(rhs, res);
+	for(int i = 0; i < size; ++i) {
+		EXPECT_NEAR(res[i], resRef[i], 1e-4);
+	}
 }
