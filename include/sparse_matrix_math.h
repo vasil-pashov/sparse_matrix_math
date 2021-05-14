@@ -1553,10 +1553,10 @@ namespace SMM {
 				assert(false && "The matrix is not positive definite");
 				return 1;
 			}
+			const int diagonalPosition = m.start[i] + nextFreeSlot[i];
 			assert(m.values[columnIndex] - diagonalElement > 0 && "The matrix is not positive definite");
 			diagonalElement = std::sqrt(m.values[columnIndex] - diagonalElement);
 			assert(std::abs(diagonalElement) > 1e-6 && "The diagonal element is 0. The matrix is not possitive definite.");
-			const int diagonalPosition = m.start[i] + nextFreeSlot[i];
 			ic0Val[diagonalPosition] = diagonalElement;
 			nextFreeSlot[i]++;
 			const real diagonalIversed = real(1) / diagonalElement;
@@ -1579,7 +1579,7 @@ namespace SMM {
 				while(k < rowEnd && column < i) {
 					const int iValueIndex = usedColumns[column];
 					if(iValueIndex != -1) {
-						sum += m.values[iValueIndex] * m.values[k];
+						sum += ic0Val[iValueIndex] * ic0Val[k];
 					}
 					k++;
 					column = m.positions[k];
@@ -2083,11 +2083,12 @@ namespace SMM {
 		}
 		Vector Ap(rows, 0);
 		const real epsSq = eps * eps;
+		real residualNormSq = 0;
 		for(int i = 0; i < maxIterations; ++i) {
 			a.rMult(p, Ap);
 			const real pAp = Ap * p;
 			// If the denominator is 0 we have a lucky breakdown. The residual at the previous step must be 0.
-			if(std::abs(pAp) < eps) {
+			if((std::abs(pAp) < eps && residualNormSq < epsSq) || pAp == 0) {
 				return SolverStatus::SUCCESS;
 			}
 			// alpha_j = (r_j, z_j) / (A.p_j, p_j)
@@ -2100,7 +2101,7 @@ namespace SMM {
 			}
 			M.apply(r, z);
 			real newRZ = 0;
-			real residualNormSq = 0;
+			residualNormSq = 0;
 			for(int j = 0; j < rows; ++j) {
 				newRZ += r[j] * z[j];
 				residualNormSq += r[j] * r[j];

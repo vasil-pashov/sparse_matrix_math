@@ -23,7 +23,7 @@ TEST_F(CG, mesh1em6_structural_48_48_177) {
 	SumRowTest(path.c_str());
 }
 
-TEST(PCG, TestApplyIC0) {
+TEST(IC0, TestApplyIC0) {
 	const int size = 5;
 	const SMM::real denseRef[size][size] = {
 		{10, 0, 0 , 4 , 0},
@@ -54,4 +54,28 @@ TEST(PCG, TestApplyIC0) {
 	for(int i = 0; i < size; ++i) {
 		EXPECT_NEAR(res[i], resRef[i], 1e-4);
 	}
+}
+
+class PCG : public SolverTest {
+	SMM::SolverStatus solve(const SMM::CSRMatrix& a, SMM::real* b, SMM::real* x, int maxIterations, SMM::real eps) override {
+		SMM::CSRMatrix::IC0Preconditioner M(a);
+		const int error = M.init();
+		EXPECT_EQ(error, 0);
+		return SMM::ConjugateGradient(a, b, x, maxIterations, eps, M);
+	}
+};
+
+TEST_F(PCG, mesh1e1_structural_48_48_177) {
+	const std::string path = ASSET_PATH + std::string("mesh1e1_structural_48_48_177.mtx");
+	SumRowTest(path.c_str());
+}
+
+TEST_F(PCG, mesh1em1_structural_48_48_177) {
+	const std::string path = ASSET_PATH + std::string("mesh1em1_structural_48_48_177.mtx");
+	SumRowTest(path.c_str());
+}
+
+TEST_F(PCG, mesh1em6_structural_48_48_177) {
+	const std::string path = ASSET_PATH + std::string("mesh1em6_structural_48_48_177.mtx");
+	SumRowTest(path.c_str());
 }
