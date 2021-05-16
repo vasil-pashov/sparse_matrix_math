@@ -1987,15 +1987,19 @@ namespace SMM {
 		// 7. 	beta_j = (r_{j+1}, r_{j+1}) / (r_j, r_j)
 		// 8.	p_{j+1} = r_{j+1} + beta_j * p_j
 		const int rows = a.getDenseRowCount();
+		const real epsSuared = eps * eps;
 		Vector r(rows, real(0));
 		a.rMultSub(b, x, r);
 
 		Vector p(rows), Ap(rows, real(0));
+		real residualNormSquared = 0;
 		for(int i = 0; i < rows; ++i) {
 			p[i] = r[i];
+			residualNormSquared += r[i] * r[i];
 		}
-		const real epsSq = eps * eps;
-		real residualNormSquared = r * r;
+		if(epsSuared > residualNormSquared) {
+			return SolverStatus::SUCCESS;
+		}
 		if(maxIterations == -1) {
 			maxIterations = rows;
 		}
@@ -2003,9 +2007,7 @@ namespace SMM {
 			a.rMult(p, Ap);
 			const real pAp = Ap * p;
 			// If the denominator is 0 we have a lucky breakdown. The residual at the previous step must be 0.
-			if(pAp == 0) {
-				return SolverStatus::SUCCESS;
-			}
+			assert(pAp != 0);
 			// alpha = (r_i, r_i) / (Ap, p)
 			const real alpha = residualNormSquared / pAp;
 			// x = x + alpha * p
@@ -2016,15 +2018,15 @@ namespace SMM {
 				r[j] = _smm_fma(-alpha, Ap[j], r[j]);
 				newResidualNormSquared += r[j] * r[j];
 			}
+			if(epsSuared > newResidualNormSquared) {
+				return SolverStatus::SUCCESS;
+			}
 			// beta = (r_{i+1}, r_(i+1)) / (r_i, r_i)
 			const real beta = newResidualNormSquared / residualNormSquared;
+			residualNormSquared = newResidualNormSquared;
 			// p = r + beta * p
 			for(int j = 0; j < rows; ++j) {
 				p[j] = _smm_fma(beta, p[j], r[j]);
-			}
-			residualNormSquared = newResidualNormSquared;
-			if(epsSq > residualNormSquared) {
-				return SolverStatus::SUCCESS;
 			}
 		}
 		return SolverStatus::MAX_ITERATIONS_REACHED;
@@ -2063,34 +2065,31 @@ namespace SMM {
 		// 9.	beta_j = (r_{j+1}, z_{j+1}) / (r_j, z_j)
 		// 10.	p_{j+1} = z_{j+1} + beta_j * p_j
 		const int rows = a.getDenseRowCount();
-		assert(
-			rows == a.getDenseColCount() && 
-			"The matrix has different row and col count."
-			"In order to use PCG we need symmetric, positive definite matrix"
-		);
+		const real epsSuared = eps * eps;
 		Vector r(rows, 0);
 		Vector z(rows, 0);
 		Vector p(rows, 0);
 		a.rMultSub(b, x, r);
 		M.apply(r, z);
 		real rz = 0;
+		real residualNormSquared = 0;
 		for(int i = 0; i < rows; ++i) {
 			rz += r[i] * z[i];
 			p[i] = z[i];
+			residualNormSquared += r[i] * r[i];
+		}
+		if(epsSuared > residualNormSquared) {
+			return SolverStatus::SUCCESS;
 		}
 		if(maxIterations == -1) {
 			maxIterations = rows;
 		}
 		Vector Ap(rows, 0);
-		const real epsSq = eps * eps;
-		real residualNormSq = 0;
 		for(int i = 0; i < maxIterations; ++i) {
 			a.rMult(p, Ap);
 			const real pAp = Ap * p;
 			// If the denominator is 0 we have a lucky breakdown. The residual at the previous step must be 0.
-			if((std::abs(pAp) < eps && residualNormSq < epsSq) || pAp == 0) {
-				return SolverStatus::SUCCESS;
-			}
+			assert(pAp != 0);
 			// alpha_j = (r_j, z_j) / (A.p_j, p_j)
 			const real alpha = rz / pAp;
 			// x_{j+1} = x_j + alpha_j * p_j
@@ -2101,12 +2100,12 @@ namespace SMM {
 			}
 			M.apply(r, z);
 			real newRZ = 0;
-			residualNormSq = 0;
+			residualNormSquared = 0;
 			for(int j = 0; j < rows; ++j) {
 				newRZ += r[j] * z[j];
-				residualNormSq += r[j] * r[j];
+				residualNormSquared += r[j] * r[j];
 			}
-			if(residualNormSq < epsSq) {
+			if(epsSuared > residualNormSquared) {
 				return SMM::SolverStatus::SUCCESS;
 			}
 			const real beta = newRZ / rz;
