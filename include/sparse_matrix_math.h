@@ -904,6 +904,29 @@ namespace SMM {
 			std::unique_ptr<real[]> ilu0Val;
 		};
 
+		/// Zero fill in Incomplete Cholesky preconditioner.
+		/// This preconditioner can be applied only to symmetric positive definite matrices
+		class IC0Preconditioner {
+		public:
+			IC0Preconditioner(const CSRMatrix& m) noexcept;
+			IC0Preconditioner(const IC0Preconditioner&) = delete;
+			IC0Preconditioner& operator=(const IC0Preconditioner&) = delete;
+			IC0Preconditioner(IC0Preconditioner&&) = default;
+			/// This will do the actual factorization of the matrix passed to the class in the constructor
+			int init() noexcept;
+			/// @brief Apply the Incomplete Cholesky preconditioner to a vector.
+			/// The procedure solves the system of equations M.x = rhs <=> x = Inverse(M).rhs
+			/// Solving the system takes O(M.getDenseRowCount()) (time proportional to the number of dense)
+			/// @param[in] rhs Vector which will be preconditioned
+			/// @param[out] x The result of preconditioning rhs
+			/// @retval Non zero on error
+			int apply(const real* rhs, real* x) const noexcept;
+		private:
+			int factorize() noexcept;
+			const CSRMatrix& m;
+			std::unique_ptr<real[]> ic0Val;
+		};
+
 		/// Factory function to generate preconditioners for this matrix
 		/// @tparam precond Type of the preconditioner defined by the SolverPreconditioner enum
 		/// @returns Preconditioner which can be used for this matrix
@@ -1406,7 +1429,7 @@ namespace SMM {
 		}
 		// This is used in the most inner loop of the following factorization, columnIndex[i] will be the index in m.positions of the i-th
 		// column in a row or -1 if the column is zero. This will be used to track the columns in the most outer loop in the factorization.
-		Vector columnIndex(cols, -1);
+		std::vector<int> columnIndex(cols, -1);
 		// TODO [Move Diagonal To End]: This can be avoided if the diagonal elements are kept in a fixed position in each row
 		// For example keep the diagonal element in the end of the row.
 		Vector diagonalElementsInv(rows);
@@ -1446,6 +1469,140 @@ namespace SMM {
 			}
 		}
 
+		return 0;
+	}
+
+	inline CSRMatrix::IC0Preconditioner::IC0Preconditioner(const CSRMatrix& m) noexcept :
+		m(m)
+	{}
+
+	inline int CSRMatrix::IC0Preconditioner::init() noexcept {
+		return factorize();
+	}
+
+	inline int CSRMatrix::IC0Preconditioner::apply(const real* rhs, real* x) const noexcept {
+		const int rows = m.getDenseRowCount();
+		// Solve L.y = rhs, y = Transpose(L).x
+		for(int row = 0; row < rows; ++row) {
+			real sum = rhs[row];
+			const int rowStart = m.start[row];
+			const int rowEnd = m.start[row+1];
+			int j = rowStart;
+			int col = m.positions[j];
+			while(col < row && j < rowEnd) {
+				sum -= ic0Val[j] * x[col];
+				j++;
+				col = m.positions[j];
+			}
+			assert(col == row && "Missing diagonal element. This means that the original matrix was not SPD.");
+			x[row] = sum / ic0Val[j];
+		}
+
+		// Solve Transpose(L).x = y
+		for(int row = rows - 1; row >= 0; --row) {
+			real sum = x[row];
+			const int rowStart = m.start[row];
+			const int rowEnd = m.start[row+1];
+			int j = rowEnd - 1;
+			int col = m.positions[j];
+			while(col > row && j >= rowStart) {
+				sum -= ic0Val[j] * x[col];
+				j--;
+				col = m.positions[j];
+			}
+			assert(col == row && "Missing diagonal element. This means that the original matrix was not SPD.");
+			x[row] = sum / ic0Val[j];
+		}
+		return 0;
+	}
+
+	inline int CSRMatrix::IC0Preconditioner::factorize() noexcept {
+		const int nnz = m.getNonZeroCount();
+		const int rows = m.getDenseRowCount();
+		assert(rows == m.getDenseColCount());
+		ic0Val.reset(new real[nnz]);
+		// For each row this will be an offset to where we can put a value. For the i-th element we have that
+		// nextFreeSlot[i] >= 0 && nextFreeSlot[i] < CSRMatrix::start[i + 1] - CSRMatrix::start[i] i.e. the i-th elements is
+		// between 0 and the number of nonzero elements in the row. In order to obtain the correcto position
+		// of the next nonzero element of the row we must compute: CSRMatrix::start[i] + nextFreeSlot[i]
+		std::vector<int> nextFreeSlot(rows, 0);
+		// This will hold the index into CSRMatrix::positions for each nonzero column of the row in the most outer loop below,
+		// so that CSRMatrix::positions[usedColumns[c]] will be the same as c. We can use CSRMatrix::positions[usedColumns[c]] to
+		// find the value of the element at that particular column of the row in the most outer loop.
+		std::vector<int> usedColumns(rows, -1);
+		// The outer loop goes trough all rows of the matrix. After each iteration of the loop all elements of the form
+		// l_j,i for j = i...rows will be found.
+		for(int i = 0; i < rows; ++i) {
+			// For each value we shall multiply the current row by some other row .we want to multiply only non-zero elements.
+			// Since we shall iterate non-zero elements of the "other" row, we need to mark which of the elements in the current
+			// (main) row are non zero. We do this by putting the index in CSRMatrix::values to the value at that particular column
+			for(int j = m.start[i]; j < m.start[i+1]; ++j) {
+				const int col = m.positions[j];
+				usedColumns[col] = j;
+			}
+			// Use separate loop to handle the diagonal element
+			real diagonalElement(0);
+			int columnIndex = m.start[i];
+			int column = m.positions[columnIndex];
+			while(column < i) {
+				diagonalElement += ic0Val[columnIndex] * ic0Val[columnIndex];
+				columnIndex++;
+				column = m.positions[columnIndex];
+			}
+			if(column != i) {
+				assert(false && "The matrix is not positive definite");
+				return 1;
+			}
+			const int diagonalPosition = m.start[i] + nextFreeSlot[i];
+			assert(m.values[columnIndex] - diagonalElement > 0 && "The matrix is not positive definite");
+			diagonalElement = std::sqrt(m.values[columnIndex] - diagonalElement);
+			assert(std::abs(diagonalElement) > 1e-6 && "The diagonal element is 0. The matrix is not possitive definite.");
+			ic0Val[diagonalPosition] = diagonalElement;
+			nextFreeSlot[i]++;
+			const real diagonalIversed = real(1) / diagonalElement;
+			
+			// When we represent the matrix in the form L*Transpose(L) for the element at position (i, j)
+			// of the original matrix is given by: a_i,j = Sum(l_i,k * l_k,j). Because of the symmetry of the matrix
+			// this is the same as: a_j_i = Sum(l_i,k * l_j,k). 
+			for(int j = i + 1; j < rows; ++j) {
+				const int rowStart = m.start[j];
+				const int valueIndex = rowStart + nextFreeSlot[j];
+				// This iteration of the loop seeks to find l_j,i but since we are doing incomplete Cholesky factorization
+				// we drop all elements l_j,i for which the corresponding element in the original matrix m_j,i is zero
+				if(m.positions[valueIndex] != i) {
+					continue;
+				}
+				// The most inner loop of the tree is just doing the sum: Sum(l_i,k * l_j,k) for k < i 
+				real sum(0);
+				const int rowEnd = m.start[j+1];
+				int k = rowStart, column = m.positions[k];
+				while(k < rowEnd && column < i) {
+					const int iValueIndex = usedColumns[column];
+					if(iValueIndex != -1) {
+						sum += ic0Val[iValueIndex] * ic0Val[k];
+					}
+					k++;
+					column = m.positions[k];
+				}
+				// After the while loop finishes k will be an index into CSRMatrix::values/positions to an element
+				// whose row index is grater than i. The symmetric element to the one we have just found is situated
+				// at some previous row with row index smaller than i. So we put it in two possitions:
+				// 1) k which will belongs to the lower triangular matrix and is sutuated towards the end of CSRMatrix::values
+				// 2) ic0Val[valueIndex] which belongs to the upper triangular matrix and is situated towards the beggining of
+				// CSRMatrix::values
+				sum = (m.values[k] - sum) * diagonalIversed;
+				ic0Val[k] = sum;
+				const int uppertTriangularPosition = m.start[i] + nextFreeSlot[i];
+				ic0Val[uppertTriangularPosition] = sum;
+				nextFreeSlot[i]++;
+				nextFreeSlot[j]++;
+			}
+			// Reset the state of the used columns
+			for(int j = m.start[i]; j < m.start[i+1]; ++j) {
+				const int col = m.positions[j];
+				usedColumns[col] = -1;
+			}
+		}
 		return 0;
 	}
 
@@ -1820,16 +1977,29 @@ namespace SMM {
 		int maxIterations,
 		real eps
 	) {
+		// The algorithm in pseudo code is as follows:
+		// 1. r_0 = b - A.x_0
+		// 2. p_0 = r_0
+		// 3. for j = 0, j, ... until convergence/max iteratoions
+		// 4.	alpha_i = (r_j, r_j) / (A.p_j, p_j)
+		// 5.	x_{j+1} = x_j + alpha_j * p_j
+		// 6.	r_{j+1} = r_j - alpha_j * A.p_j
+		// 7. 	beta_j = (r_{j+1}, r_{j+1}) / (r_j, r_j)
+		// 8.	p_{j+1} = r_{j+1} + beta_j * p_j
 		const int rows = a.getDenseRowCount();
+		const real epsSuared = eps * eps;
 		Vector r(rows, real(0));
 		a.rMultSub(b, x, r);
 
 		Vector p(rows), Ap(rows, real(0));
+		real residualNormSquared = 0;
 		for(int i = 0; i < rows; ++i) {
 			p[i] = r[i];
+			residualNormSquared += r[i] * r[i];
 		}
-		const real epsSq = eps * eps;
-		real residualNormSquared = r * r;
+		if(epsSuared > residualNormSquared) {
+			return SolverStatus::SUCCESS;
+		}
 		if(maxIterations == -1) {
 			maxIterations = rows;
 		}
@@ -1837,30 +2007,115 @@ namespace SMM {
 			a.rMult(p, Ap);
 			const real pAp = Ap * p;
 			// If the denominator is 0 we have a lucky breakdown. The residual at the previous step must be 0.
-			if(pAp == 0) {
-				return SolverStatus::SUCCESS;
-			}
+			assert(pAp != 0);
 			// alpha = (r_i, r_i) / (Ap, p)
 			const real alpha = residualNormSquared / pAp;
 			// x = x + alpha * p
 			// r = r - alpha * Ap
+			real newResidualNormSquared = 0;
 			for(int j = 0; j < rows; ++j) {
 				x[j] = _smm_fma(alpha, p[j], x[j]);
 				r[j] = _smm_fma(-alpha, Ap[j], r[j]);
+				newResidualNormSquared += r[j] * r[j];
 			}
-			const real newResidualNormSquared = r * r;
+			if(epsSuared > newResidualNormSquared) {
+				return SolverStatus::SUCCESS;
+			}
 			// beta = (r_{i+1}, r_(i+1)) / (r_i, r_i)
 			const real beta = newResidualNormSquared / residualNormSquared;
+			residualNormSquared = newResidualNormSquared;
 			// p = r + beta * p
 			for(int j = 0; j < rows; ++j) {
 				p[j] = _smm_fma(beta, p[j], r[j]);
 			}
-			residualNormSquared = newResidualNormSquared;
-			if(epsSq > residualNormSquared) {
-				return SolverStatus::SUCCESS;
-			}
 		}
 		return SolverStatus::MAX_ITERATIONS_REACHED;
+	}
+
+	/// Preconditioned version of the Conjugate Gradient method. With Incomplete Cholesky preconditioner
+	/// The preconditioner is given in the form L*Transpose(L). This is a separate algorithm, since IC0,
+	/// is symmetric and we can utilize this property in the solver
+	/// Matrix a should be symmetric positive definite matrix. 
+	/// @param[in] a Coefficient matrix for the system of equations
+	/// @param[in] b Right hand side for the system of equations
+	/// @param[in,out] x Initial condition, the result will be written here too
+	/// @param[in] maxIterations Iterations threshold for the method.
+	/// If convergence was not reached for less than maxIterations the method will exit.
+	/// If maxIterations is -1 the method will do all possible iterations (the same as the number of rows in the matrix)
+	/// @param[in] eps Required size of the L2 norm of the residual
+	/// @param[in] preconditioner Incomplete Cholesky preconditioner which will be used precondition this system.
+	/// @return SolverStatus the status the solved system
+	inline SolverStatus ConjugateGradient(
+		const CSRMatrix& a,
+		real* b,
+		real* x,
+		int maxIterations,
+		real eps,
+		const CSRMatrix::IC0Preconditioner& M
+	) {
+		// Pseudo code for the algorithm:
+		// 1. r_0 = b - A.x_0
+		// 2. z_0 = Inverse(M).r_0
+		// 3. p_0 = z_0
+		// 4. for j = 0, 1, ... until convergence/max iterations
+		// 5.	alpha_j = (r_j, z_j) / (A.p_j, p_j)
+		// 6.	x_{j+1} = x_j + alpha_j * p_j
+		// 7.	r_{j+1} = r_j - alpha_j * A.p_j
+		// 8.	z_{j+1} = Inverse(M).r_{j+1}
+		// 9.	beta_j = (r_{j+1}, z_{j+1}) / (r_j, z_j)
+		// 10.	p_{j+1} = z_{j+1} + beta_j * p_j
+		const int rows = a.getDenseRowCount();
+		const real epsSuared = eps * eps;
+		Vector r(rows, 0);
+		Vector z(rows, 0);
+		Vector p(rows, 0);
+		a.rMultSub(b, x, r);
+		M.apply(r, z);
+		real rz = 0;
+		real residualNormSquared = 0;
+		for(int i = 0; i < rows; ++i) {
+			rz += r[i] * z[i];
+			p[i] = z[i];
+			residualNormSquared += r[i] * r[i];
+		}
+		if(epsSuared > residualNormSquared) {
+			return SolverStatus::SUCCESS;
+		}
+		if(maxIterations == -1) {
+			maxIterations = rows;
+		}
+		Vector Ap(rows, 0);
+		for(int i = 0; i < maxIterations; ++i) {
+			a.rMult(p, Ap);
+			const real pAp = Ap * p;
+			// If the denominator is 0 we have a lucky breakdown. The residual at the previous step must be 0.
+			assert(pAp != 0);
+			// alpha_j = (r_j, z_j) / (A.p_j, p_j)
+			const real alpha = rz / pAp;
+			// x_{j+1} = x_j + alpha_j * p_j
+			// r_{j+1} = r_j - alpha_j * A.p_j
+			for(int j = 0; j < rows; ++j) {
+				x[j] = _smm_fma(alpha, p[j], x[j]);
+				r[j] = _smm_fma(-alpha, Ap[j], r[j]);
+			}
+			M.apply(r, z);
+			real newRZ = 0;
+			residualNormSquared = 0;
+			for(int j = 0; j < rows; ++j) {
+				newRZ += r[j] * z[j];
+				residualNormSquared += r[j] * r[j];
+			}
+			if(epsSuared > residualNormSquared) {
+				return SMM::SolverStatus::SUCCESS;
+			}
+			const real beta = newRZ / rz;
+			// p_{j+1} = z_{j+1} + beta_j * p_j
+			for(int j = 0; j < rows; ++j) {
+				p[j] = _smm_fma(beta, p[j], z[j]);
+			}
+			rz = newRZ;
+		}
+		return SMM::SolverStatus::MAX_ITERATIONS_REACHED;
 	}
 	
 	enum class MatrixLoadStatus {
