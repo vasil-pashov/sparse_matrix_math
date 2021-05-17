@@ -1964,7 +1964,8 @@ namespace SMM {
 	/// Matrix a should be symmetric positive definite matrix. 
 	/// @param[in] a Coefficient matrix for the system of equations
 	/// @param[in] b Right hand side for the system of equations
-	/// @param[in,out] x Initial condition, the result will be written here too
+	/// @param[in] x0 Initial condition
+	/// @param[out] x Output vector (could be the same as the initial condition)
 	/// @param[in] maxIterations Iterations threshold for the method.
 	/// If convergence was not reached for less than maxIterations the method will exit.
 	/// If maxIterations is -1 the method will do all possible iterations (the same as the number of rows in the matrix)
@@ -1972,8 +1973,9 @@ namespace SMM {
 	/// @return SolverStatus the status the solved system
 	inline SolverStatus ConjugateGradient(
 		const CSRMatrix& a,
-		real* b,
-		real* x,
+		const real* const b,
+		const real* const x0,
+		real* const x,
 		int maxIterations,
 		real eps
 	) {
@@ -1989,7 +1991,7 @@ namespace SMM {
 		const int rows = a.getDenseRowCount();
 		const real epsSuared = eps * eps;
 		Vector r(rows, real(0));
-		a.rMultSub(b, x, r);
+		a.rMultSub(b, x0, r);
 
 		Vector p(rows), Ap(rows, real(0));
 		real residualNormSquared = 0;
@@ -2003,6 +2005,10 @@ namespace SMM {
 		if(maxIterations == -1) {
 			maxIterations = rows;
 		}
+		// We have initial condition different than the output vector on the first iteration when we compute
+		// x = x + alpha * p, we must have the x on the right hand side to be the initial condition x. And on all
+		// next iterations it must be the output vector.
+		const real* currentX = x0;
 		for(int i = 0; i < maxIterations; ++i) {
 			a.rMult(p, Ap);
 			const real pAp = Ap * p;
@@ -2014,7 +2020,7 @@ namespace SMM {
 			// r = r - alpha * Ap
 			real newResidualNormSquared = 0;
 			for(int j = 0; j < rows; ++j) {
-				x[j] = _smm_fma(alpha, p[j], x[j]);
+				x[j] = _smm_fma(alpha, p[j], currentX[j]);
 				r[j] = _smm_fma(-alpha, Ap[j], r[j]);
 				newResidualNormSquared += r[j] * r[j];
 			}
@@ -2028,6 +2034,7 @@ namespace SMM {
 			for(int j = 0; j < rows; ++j) {
 				p[j] = _smm_fma(beta, p[j], r[j]);
 			}
+			currentX = x;
 		}
 		return SolverStatus::MAX_ITERATIONS_REACHED;
 	}
@@ -2038,7 +2045,8 @@ namespace SMM {
 	/// Matrix a should be symmetric positive definite matrix. 
 	/// @param[in] a Coefficient matrix for the system of equations
 	/// @param[in] b Right hand side for the system of equations
-	/// @param[in,out] x Initial condition, the result will be written here too
+	/// @param[in] x0 Initial condition
+	/// @param[out] x Output vector (could be the same as the initial condition)
 	/// @param[in] maxIterations Iterations threshold for the method.
 	/// If convergence was not reached for less than maxIterations the method will exit.
 	/// If maxIterations is -1 the method will do all possible iterations (the same as the number of rows in the matrix)
@@ -2047,8 +2055,9 @@ namespace SMM {
 	/// @return SolverStatus the status the solved system
 	inline SolverStatus ConjugateGradient(
 		const CSRMatrix& a,
-		real* b,
-		real* x,
+		const real* const b,
+		const real* const x0,
+		real* const x,
 		int maxIterations,
 		real eps,
 		const CSRMatrix::IC0Preconditioner& M
@@ -2069,7 +2078,7 @@ namespace SMM {
 		Vector r(rows, 0);
 		Vector z(rows, 0);
 		Vector p(rows, 0);
-		a.rMultSub(b, x, r);
+		a.rMultSub(b, x0, r);
 		M.apply(r, z);
 		real rz = 0;
 		real residualNormSquared = 0;
@@ -2085,6 +2094,10 @@ namespace SMM {
 			maxIterations = rows;
 		}
 		Vector Ap(rows, 0);
+		// We have initial condition different than the output vector on the first iteration when we compute
+		// x = x + alpha * p, we must have the x on the right hand side to be the initial condition x. And on all
+		// next iterations it must be the output vector.
+		const real* currentX = x0;
 		for(int i = 0; i < maxIterations; ++i) {
 			a.rMult(p, Ap);
 			const real pAp = Ap * p;
@@ -2095,7 +2108,7 @@ namespace SMM {
 			// x_{j+1} = x_j + alpha_j * p_j
 			// r_{j+1} = r_j - alpha_j * A.p_j
 			for(int j = 0; j < rows; ++j) {
-				x[j] = _smm_fma(alpha, p[j], x[j]);
+				x[j] = _smm_fma(alpha, p[j], currentX[j]);
 				r[j] = _smm_fma(-alpha, Ap[j], r[j]);
 			}
 			M.apply(r, z);
@@ -2114,6 +2127,7 @@ namespace SMM {
 				p[j] = _smm_fma(beta, p[j], z[j]);
 			}
 			rz = newRZ;
+			currentX = x;
 		}
 		return SMM::SolverStatus::MAX_ITERATIONS_REACHED;
 	}
