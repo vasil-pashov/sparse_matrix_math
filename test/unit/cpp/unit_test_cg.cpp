@@ -4,7 +4,7 @@
 
 class CG : public SolverTest {
 	SMM::SolverStatus solve(const SMM::CSRMatrix& a, SMM::real* b, SMM::real* x, int maxIterations, SMM::real eps) override {
-		return SMM::ConjugateGradient(a, b, x, maxIterations, eps);
+		return SMM::ConjugateGradient(a, b, x, x, maxIterations, eps);
 	}
 };
 
@@ -61,7 +61,7 @@ class PCG : public SolverTest {
 		SMM::CSRMatrix::IC0Preconditioner M(a);
 		const int error = M.init();
 		EXPECT_EQ(error, 0);
-		return SMM::ConjugateGradient(a, b, x, maxIterations, eps, M);
+		return SMM::ConjugateGradient(a, b, x, x, maxIterations, eps, M);
 	}
 };
 
