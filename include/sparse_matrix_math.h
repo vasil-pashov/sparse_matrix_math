@@ -95,15 +95,21 @@ namespace SMM {
 		}
 
 		void init(const int size) {
-			assert(this->size == 0 && data == nullptr);
-			this->size = size;
-			data = static_cast<real*>(malloc(size * sizeof(real)));
+			if(this->size != size) {
+				free(data);
+				this->size = size;
+				data = static_cast<real*>(malloc(size * sizeof(real)));
+			}
 		}
 
 		void init(const int size, const real val) {
-			assert(this->size == 0 && data == nullptr);
-			this->size = size;
-			initDataWithVal(val);
+			if(this->size != size) {
+				this->size = size;
+				free(data);
+				initDataWithVal(val);
+			} else {
+				fill(val);
+			}
 		}
 
 		const int getSize() const {
