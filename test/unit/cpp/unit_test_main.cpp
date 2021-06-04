@@ -274,6 +274,22 @@ TEST(CSRMatrix, RowIterators) {
 		EXPECT_EQ(numElements, numElementsInRow[i]);
 	}
 
+	{
+		SMM::real current = 0.0;
+		for(int i = 0; i < numRows; ++i) {
+			SMM::CSRMatrix::RowIterator row = m.rowBegin(i);
+			for(int j = 0; j < numCols && row != m.rowEnd(i); ++j) {
+				row->setValue(current++);
+				++row;
+			}
+		}
+
+		current = 0;
+		for(const auto& el : m) {
+			EXPECT_EQ(el.getValue(), current++);
+		}
+	}
+
 }
 
 

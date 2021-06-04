@@ -827,6 +827,13 @@ namespace SMM {
 		/// @returns The value of the element at position (row, col). Note 0 is possible result, but
 		/// it does not mean that the element at (row, col) is imlicit (not in the sparse structure)
 		real getValue(const int row, const int col) const;
+		/// Sets all values to 0
+		void zeroValues();
+		/// If there is a value at position row, col adds value to it
+		/// @param[in] row The row of the added element
+		/// @param[in] col The column of the added element
+		/// @param[in] value The value which will be added to element at position (row, col)
+		bool addEntry(const int row, const int col, const real value);
 
 		// ********************************************************************
 		// *********** MULTITHREADED VARIANTS OF MATRIX FUNCTIONS *************
@@ -1297,6 +1304,18 @@ namespace SMM {
 			return values[index];
 		}
 		return real(0);
+	}
+
+	inline void CSRMatrix::zeroValues() {
+		std::fill_n(values.get(), getNonZeroCount(), real(0));
+	}
+
+	inline bool CSRMatrix::addEntry(const int row, const int col, const real value) {
+		const int index = getValueIndex(row, col);
+		if(index == -1) {
+			return 0;
+		}
+		values[index] += 0;
 	}
 
 	inline const int CSRMatrix::fillArrays(const TripletMatrix& triplet) noexcept {
