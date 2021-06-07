@@ -491,57 +491,35 @@ namespace SMM {
 
 	class CSRMatrix;
 
-	class CSRElement {
-	public:
-		const real getValue() const noexcept;
-		const int getRow() const noexcept;
-		const int getCol() const noexcept;
-		friend void swap(CSRElement& a, CSRElement& b) noexcept;
-		friend class CSRConstIterator;
-		friend class CSRConstRowIterator;
-		CSRElement(
-			const CSRMatrix* m,
-			const int currentStartIndex,
-			const int currentPositionIndex
-		) noexcept;
-
-		CSRElement(const CSRElement&) = default;
-		CSRElement& operator=(const CSRElement&) = default;
-		const bool operator==(const CSRElement&) const;
-
-	protected:
-		const CSRMatrix* m;
-		/// Index into start for the element which the iterator is pointing to
-		int currentStartIndex;
-		/// Index into positions for the element which the iterator is pointing to
-		int currentPositionIndex;
-	};
-
-	inline CSRElement::CSRElement(
-		const CSRMatrix* m,
-		const int currentStartIndex,
-		const int currentPositionIndex
-	) noexcept :
-		m(m),
-		currentStartIndex(currentStartIndex),
-		currentPositionIndex(currentPositionIndex) {
-	}
-
-	inline void swap(CSRElement& a, CSRElement& b) noexcept {
-		using std::swap;
-		swap(a.m, b.m);
-		swap(a.currentStartIndex, b.currentStartIndex);
-		swap(a.currentPositionIndex, b.currentPositionIndex);
-	}
-
-	inline const bool CSRElement::operator==(const CSRElement& other) const {
-		return m == other.m&&
-			other.currentStartIndex == currentStartIndex &&
-			other.currentPositionIndex == currentPositionIndex;
-	}
-
 	class _CSRConstIteratorBase {
 	public:
+
+		class CSRElement {
+		public:
+			const real getValue() const noexcept;
+			const int getRow() const noexcept;
+			const int getCol() const noexcept;
+			friend void swap(CSRElement& a, CSRElement& b) noexcept;
+			friend class CSRConstIterator;
+			friend class CSRConstRowIterator;
+			CSRElement(
+				const CSRMatrix* m,
+				const int currentStartIndex,
+				const int currentPositionIndex
+			) noexcept;
+
+			CSRElement(const CSRElement&) = default;
+			CSRElement& operator=(const CSRElement&) = default;
+			const bool operator==(const CSRElement&) const;
+
+		protected:
+			const CSRMatrix* m;
+			/// Index into start for the element which the iterator is pointing to
+			int currentStartIndex;
+			/// Index into positions for the element which the iterator is pointing to
+			int currentPositionIndex;
+		};
+
 		using iterator_category = std::forward_iterator_tag;
 		using value_type = CSRElement;
 		using pointer = const CSRElement*;
@@ -585,6 +563,29 @@ namespace SMM {
 
 	inline const bool _CSRConstIteratorBase::operator!=(const _CSRConstIteratorBase& other) const noexcept {
 		return !(*this == other);
+	}
+
+	inline _CSRConstIteratorBase::CSRElement::CSRElement(
+		const CSRMatrix* m,
+		const int currentStartIndex,
+		const int currentPositionIndex
+	) noexcept :
+		m(m),
+		currentStartIndex(currentStartIndex),
+		currentPositionIndex(currentPositionIndex) {
+	}
+
+	inline void swap(_CSRConstIteratorBase::CSRElement& a, _CSRConstIteratorBase::CSRElement& b) noexcept {
+		using std::swap;
+		swap(a.m, b.m);
+		swap(a.currentStartIndex, b.currentStartIndex);
+		swap(a.currentPositionIndex, b.currentPositionIndex);
+	}
+
+	inline const bool _CSRConstIteratorBase::CSRElement::operator==(const _CSRConstIteratorBase::CSRElement& other) const {
+		return m == other.m&&
+			other.currentStartIndex == currentStartIndex &&
+			other.currentPositionIndex == currentPositionIndex;
 	}
 
 	/// Forward iterator, which iterates over all elements of the matrix
@@ -675,7 +676,7 @@ namespace SMM {
 		using ConstRowIterator = CSRConstRowIterator;
 
 		friend class CSRConstIterator;
-		friend class CSRElement;
+		friend class _CSRConstIteratorBase;
 		friend class CSRConstRowIterator;
 
 		CSRMatrix() noexcept;
@@ -1577,14 +1578,14 @@ namespace SMM {
 	}
 
 
-	inline const real CSRElement::getValue() const noexcept {
+	inline const real _CSRConstIteratorBase::CSRElement::getValue() const noexcept {
 		return m->values[currentPositionIndex];
 	}
 
-	inline const int CSRElement::getRow() const noexcept {
+	inline const int _CSRConstIteratorBase::CSRElement::getRow() const noexcept {
 		return currentStartIndex;
 	}
-	inline const int CSRElement::getCol() const noexcept {
+	inline const int _CSRConstIteratorBase::CSRElement::getCol() const noexcept {
 		return m->positions[currentPositionIndex];
 	}
 
