@@ -497,10 +497,8 @@ namespace SMM {
 		const int getRow() const noexcept;
 		const int getCol() const noexcept;
 		friend void swap(CSRElement& a, CSRElement& b) noexcept;
-		friend class _CSRConstIteratorBase;
 		friend class CSRConstIterator;
 		friend class CSRConstRowIterator;
-	protected:
 		CSRElement(
 			const CSRMatrix* m,
 			const int currentStartIndex,
@@ -511,6 +509,7 @@ namespace SMM {
 		CSRElement& operator=(const CSRElement&) = default;
 		const bool operator==(const CSRElement&) const;
 
+	protected:
 		const CSRMatrix* m;
 		/// Index into start for the element which the iterator is pointing to
 		int currentStartIndex;
