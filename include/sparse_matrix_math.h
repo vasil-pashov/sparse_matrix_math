@@ -491,6 +491,8 @@ namespace SMM {
 
 	class CSRMatrix;
 
+	/// @brief Base class for const forward iterator for matrix in compressed sparse row format
+	template<typename MatrixPtrT>
 	class _CSRConstIteratorBase {
 	public:
 
@@ -503,7 +505,7 @@ namespace SMM {
 			friend class CSRConstIterator;
 			friend class CSRConstRowIterator;
 			CSRElement(
-				const CSRMatrix* m,
+				MatrixPtrT m,
 				const int currentStartIndex,
 				const int currentPositionIndex
 			) noexcept;
@@ -513,7 +515,7 @@ namespace SMM {
 			const bool operator==(const CSRElement&) const;
 
 		protected:
-			const CSRMatrix* m;
+			MatrixPtrT m;
 			/// Index into start for the element which the iterator is pointing to
 			int currentStartIndex;
 			/// Index into positions for the element which the iterator is pointing to
@@ -526,7 +528,7 @@ namespace SMM {
 		using reference = const CSRElement&;
 
 		_CSRConstIteratorBase(
-			const CSRMatrix* m,
+			MatrixPtrT m,
 			const int currentStartIndex,
 			const int currentPositionIndex
 		) noexcept;
@@ -540,33 +542,38 @@ namespace SMM {
 		CSRElement currentElement;
 	};
 
-	/// @brief Base class for const forward iterator for matrix in compressed sparse row format
-	inline _CSRConstIteratorBase::_CSRConstIteratorBase(
-		const CSRMatrix* m,
+	template<typename MatrixPtrT>
+	inline _CSRConstIteratorBase<MatrixPtrT>::_CSRConstIteratorBase(
+		MatrixPtrT m,
 		const int currentStartIndex,
 		const int currentPositionIndex
 	) noexcept :
 		currentElement(m, currentStartIndex, currentPositionIndex)
 	{ }
 
-	inline typename _CSRConstIteratorBase::reference _CSRConstIteratorBase::operator*() const {
+	template<typename MatrixPtrT>
+	inline typename _CSRConstIteratorBase<MatrixPtrT>::reference _CSRConstIteratorBase<MatrixPtrT>::operator*() const {
 		return currentElement;
 	}
 
-	inline typename _CSRConstIteratorBase::pointer _CSRConstIteratorBase::operator->() const {
+	template<typename MatrixPtrT>
+	inline typename _CSRConstIteratorBase<MatrixPtrT>::pointer _CSRConstIteratorBase<MatrixPtrT>::operator->() const {
 		return &currentElement;
 	}
 
-	inline const bool _CSRConstIteratorBase::operator==(const _CSRConstIteratorBase& other) const noexcept {
+	template<typename MatrixPtrT>
+	inline const bool _CSRConstIteratorBase<MatrixPtrT>::operator==(const _CSRConstIteratorBase<MatrixPtrT>& other) const noexcept {
 		return currentElement == other.currentElement;
 	}
 
-	inline const bool _CSRConstIteratorBase::operator!=(const _CSRConstIteratorBase& other) const noexcept {
+	template<typename MatrixPtrT>
+	inline const bool _CSRConstIteratorBase<MatrixPtrT>::operator!=(const _CSRConstIteratorBase<MatrixPtrT>& other) const noexcept {
 		return !(*this == other);
 	}
 
-	inline _CSRConstIteratorBase::CSRElement::CSRElement(
-		const CSRMatrix* m,
+	template<typename MatrixPtrT>
+	inline _CSRConstIteratorBase<MatrixPtrT>::CSRElement::CSRElement(
+		MatrixPtrT m,
 		const int currentStartIndex,
 		const int currentPositionIndex
 	) noexcept :
@@ -575,14 +582,34 @@ namespace SMM {
 		currentPositionIndex(currentPositionIndex) {
 	}
 
-	inline void swap(_CSRConstIteratorBase::CSRElement& a, _CSRConstIteratorBase::CSRElement& b) noexcept {
+	template<typename MatrixPtrT>
+	inline const real _CSRConstIteratorBase<MatrixPtrT>::CSRElement::getValue() const noexcept {
+		return m->values[currentPositionIndex];
+	}
+
+	template<typename MatrixPtrT>
+	inline const int _CSRConstIteratorBase<MatrixPtrT>::CSRElement::getRow() const noexcept {
+		return currentStartIndex;
+	}
+
+	template<typename MatrixPtrT>
+	inline const int _CSRConstIteratorBase<MatrixPtrT>::CSRElement::getCol() const noexcept {
+		return m->positions[currentPositionIndex];
+	}
+
+	template<typename MatrixPtrT>
+	inline void swap(
+		typename _CSRConstIteratorBase<MatrixPtrT>::CSRElement& a,
+		typename _CSRConstIteratorBase<MatrixPtrT>::CSRElement& b
+	) noexcept {
 		using std::swap;
 		swap(a.m, b.m);
 		swap(a.currentStartIndex, b.currentStartIndex);
 		swap(a.currentPositionIndex, b.currentPositionIndex);
 	}
 
-	inline const bool _CSRConstIteratorBase::CSRElement::operator==(const _CSRConstIteratorBase::CSRElement& other) const {
+	template<typename MatrixPtrT>
+	inline const bool _CSRConstIteratorBase<MatrixPtrT>::CSRElement::operator==(const _CSRConstIteratorBase<MatrixPtrT>::CSRElement& other) const {
 		return m == other.m&&
 			other.currentStartIndex == currentStartIndex &&
 			other.currentPositionIndex == currentPositionIndex;
@@ -590,7 +617,7 @@ namespace SMM {
 
 	/// Forward iterator, which iterates over all elements of the matrix
 	/// The rows are guaranteed to be iterated in an increasing order
-	class CSRConstIterator : public _CSRConstIteratorBase {
+	class CSRConstIterator : public _CSRConstIteratorBase<const CSRMatrix*> {
 	public:
 		CSRConstIterator(
 			const CSRMatrix* m,
@@ -629,7 +656,7 @@ namespace SMM {
 		std::swap(a.denseRowCount, b.denseRowCount);
 	}
 
-	class CSRConstRowIterator : public _CSRConstIteratorBase {
+	class CSRConstRowIterator : public _CSRConstIteratorBase<const CSRMatrix*> {
 	public:
 		CSRConstRowIterator(
 			const CSRMatrix* m,
@@ -676,7 +703,7 @@ namespace SMM {
 		using ConstRowIterator = CSRConstRowIterator;
 
 		friend class CSRConstIterator;
-		friend class _CSRConstIteratorBase;
+		friend class _CSRConstIteratorBase<const CSRMatrix*>;
 		friend class CSRConstRowIterator;
 
 		CSRMatrix() noexcept;
@@ -1575,18 +1602,6 @@ namespace SMM {
 			}
 		}
 		return 0;
-	}
-
-
-	inline const real _CSRConstIteratorBase::CSRElement::getValue() const noexcept {
-		return m->values[currentPositionIndex];
-	}
-
-	inline const int _CSRConstIteratorBase::CSRElement::getRow() const noexcept {
-		return currentStartIndex;
-	}
-	inline const int _CSRConstIteratorBase::CSRElement::getCol() const noexcept {
-		return m->positions[currentPositionIndex];
 	}
 
 	inline CSRConstIterator& CSRConstIterator::operator++() noexcept {
