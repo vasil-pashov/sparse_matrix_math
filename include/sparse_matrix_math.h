@@ -695,20 +695,20 @@ namespace SMM {
 
 	
 	template<typename MatrixPtrT>
-	class CSRConstRowIterator : public _CSRIteratorBase<const CSRMatrix*> {
+	class CSRRowIterator : public _CSRIteratorBase<const CSRMatrix*> {
 	public:
-		CSRConstRowIterator(
+		CSRRowIterator(
 			const CSRMatrix* m,
 			const int currentStartIndex,
 			const int currentPositionIndex
 		) noexcept;
-		CSRConstRowIterator& operator++() noexcept;
-		CSRConstRowIterator operator++(int) noexcept;
-		friend void swap(CSRConstRowIterator& a, CSRConstRowIterator& b) noexcept;
+		CSRRowIterator& operator++() noexcept;
+		CSRRowIterator operator++(int) noexcept;
+		friend void swap(CSRRowIterator& a, CSRRowIterator& b) noexcept;
 	};
 
 	template<typename MatrixPtrT>
-	inline CSRConstRowIterator<MatrixPtrT>::CSRConstRowIterator(
+	inline CSRRowIterator<MatrixPtrT>::CSRRowIterator(
 		const CSRMatrix* m,
 		const int currentStartIndex,
 		const int currentPositionIndex
@@ -719,7 +719,7 @@ namespace SMM {
 	}
 
 	template<typename MatrixPtrT>
-	inline CSRConstRowIterator<MatrixPtrT>& CSRConstRowIterator<MatrixPtrT>::operator++() noexcept {
+	inline CSRRowIterator<MatrixPtrT>& CSRRowIterator<MatrixPtrT>::operator++() noexcept {
 		const int row = getRow();
 		const int nextRowStart = getRowStartPointer(row + 1);
 		const int columnPointer = getColumnPointer() + 1;
@@ -732,14 +732,14 @@ namespace SMM {
 	}
 
 	template<typename MatrixPtrT>
-	inline CSRConstRowIterator<MatrixPtrT> CSRConstRowIterator<MatrixPtrT>::operator++(int) noexcept {
-		CSRConstRowIterator initialState = *this;
+	inline CSRRowIterator<MatrixPtrT> CSRRowIterator<MatrixPtrT>::operator++(int) noexcept {
+		CSRRowIterator initialState = *this;
 		++(*this);
 		return initialState;
 	}
 
 	template<typename MatrixPtrT>
-	inline void swap(CSRConstRowIterator<MatrixPtrT>& a, CSRConstRowIterator<MatrixPtrT>& b) noexcept {
+	inline void swap(CSRRowIterator<MatrixPtrT>& a, CSRRowIterator<MatrixPtrT>& b) noexcept {
 		swap(a.currentElement, b.currentElement);
 	}
 
@@ -755,12 +755,12 @@ namespace SMM {
 	class CSRMatrix {
 	public:
 		using ConstIterator = CSRConstIterator;
-		using ConstRowIterator = CSRConstRowIterator<const CSRMatrix*>;
+		using ConstRowIterator = CSRRowIterator<const CSRMatrix*>;
 
 		friend class CSRConstIterator;
 		friend class _CSRIteratorBase<const CSRMatrix*>;
 		friend class _CSRIteratorBase<CSRMatrix*>;
-		friend class CSRConstRowIterator<const CSRMatrix*>;
+		friend class CSRRowIterator<const CSRMatrix*>;
 
 		CSRMatrix() noexcept;
 		CSRMatrix(const TripletMatrix& triplet) noexcept;
