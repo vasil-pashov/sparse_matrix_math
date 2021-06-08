@@ -563,6 +563,9 @@ namespace SMM {
 		int getRowStartPointer(int row) {
 			return currentElement.m->start[row];
 		}
+		int getDenseRowCount() const {
+			return currentElement.m->getDenseRowCount();
+		}
 		CSRElement currentElement;
 	};
 
@@ -654,26 +657,20 @@ namespace SMM {
 		CSRIterator(
 			MatrixPtrT m,
 			const int currentStartIndex,
-			const int currentPositionIndex,
-			const int denseRowCount
+			const int currentPositionIndex
 		) noexcept;
 		CSRIterator& operator++() noexcept;
 		CSRIterator operator++(int) noexcept;
 		friend void swap(CSRIterator& a, CSRIterator& b) noexcept;
-	private:
-		/// Total number of rows in the matrix
-		int denseRowCount;
 	};
 
 	template<typename MatrixPtrT>
 	inline CSRIterator<MatrixPtrT>::CSRIterator(
 		MatrixPtrT m,
 		const int currentStartIndex,
-		const int currentPositionIndex,
-		const int denseRowCount
+		const int currentPositionIndex
 	) noexcept :
-		_CSRIteratorBase<MatrixPtrT>(m, currentStartIndex, currentPositionIndex),
-		denseRowCount(denseRowCount)
+		_CSRIteratorBase<MatrixPtrT>(m, currentStartIndex, currentPositionIndex)
 	{
 
 	}
@@ -684,7 +681,7 @@ namespace SMM {
 		this->setColumnPointer(currentColumnPointer);
 		int currentRow = this->getRow();
 		assert(currentColumnPointer <= this->getRowStartPointer(currentRow + 1));
-		while(currentRow < denseRowCount && currentColumnPointer == this->getRowStartPointer(currentRow + 1)) {
+		while(currentRow < this->getDenseRowCount() && currentColumnPointer == this->getRowStartPointer(currentRow + 1)) {
 			currentRow++;
 		}
 		this->setRow(currentRow);
@@ -1128,11 +1125,11 @@ namespace SMM {
 	}
 
 	inline CSRMatrix::ConstIterator CSRMatrix::begin() const noexcept {
-		return ConstIterator(this, firstActiveStart, 0, getDenseRowCount());
+		return ConstIterator(this, firstActiveStart, 0);
 	}
 
 	inline CSRMatrix::ConstIterator CSRMatrix::end() const noexcept {
-		return ConstIterator(this, denseRowCount, start[denseRowCount], getDenseRowCount());
+		return ConstIterator(this, denseRowCount, start[denseRowCount]);
 	}
 
 	inline CSRMatrix::ConstRowIterator CSRMatrix::rowBegin(const int i) const noexcept {
