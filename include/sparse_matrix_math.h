@@ -504,12 +504,11 @@ namespace SMM {
 
 		class CSRElement {
 		public:
+			friend class _CSRIteratorBase<MatrixPtrT>;
 			const real getValue() const noexcept;
 			const int getRow() const noexcept;
 			const int getCol() const noexcept;
 			friend void swap(CSRElement& a, CSRElement& b) noexcept;
-			friend class CSRConstIterator;
-			friend class CSRConstRowIterator;
 			CSRElement(
 				MatrixPtrT m,
 				const int currentStartIndex,
@@ -545,6 +544,26 @@ namespace SMM {
 		reference operator*() const;
 		pointer operator->() const;
 	protected:
+		int getColumnPointer() const {
+			return currentElement.currentPositionIndex;
+		}
+		void setColumnPointer(int cp) {
+			assert(cp >= 0 && cp <= currentElement.m->getNonZeroCount());
+			currentElement.currentPositionIndex = cp;
+		}
+		int getRow() const {
+			return currentElement.currentStartIndex;
+		}
+		void setRow(int row) {
+			assert(row >= 0 && row <= currentElement.m->getDenseRowCount());
+			currentElement.currentStartIndex = row;
+		}
+		int getColumn() {
+			return currentElement.m[currentElement.currentPositionIndex];
+		}
+		int getRowStartPointer(int row) {
+			return currentElement.m->start[row];
+		}
 		CSRElement currentElement;
 	};
 
@@ -651,6 +670,18 @@ namespace SMM {
 
 	}
 
+	inline CSRConstIterator& CSRConstIterator::operator++() noexcept {
+		const int currentColumnPointer = getColumnPointer() + 1;
+		setColumnPointer(currentColumnPointer);
+		int currentRow = getRow();
+		assert(currentColumnPointer <= getRowStartPointer(currentRow + 1));
+		while(currentRow < denseRowCount && currentColumnPointer == getRowStartPointer(currentRow + 1)) {
+			currentRow++;
+		}
+		setRow(currentRow);
+		return *this;
+	}
+
 	inline CSRConstIterator CSRConstIterator::operator++(int) noexcept {
 		CSRConstIterator initialState = *this;
 		++(*this);
@@ -663,6 +694,7 @@ namespace SMM {
 	}
 
 	
+	template<typename MatrixPtrT>
 	class CSRConstRowIterator : public _CSRIteratorBase<const CSRMatrix*> {
 	public:
 		CSRConstRowIterator(
@@ -675,7 +707,8 @@ namespace SMM {
 		friend void swap(CSRConstRowIterator& a, CSRConstRowIterator& b) noexcept;
 	};
 
-	inline CSRConstRowIterator::CSRConstRowIterator(
+	template<typename MatrixPtrT>
+	inline CSRConstRowIterator<MatrixPtrT>::CSRConstRowIterator(
 		const CSRMatrix* m,
 		const int currentStartIndex,
 		const int currentPositionIndex
@@ -685,13 +718,28 @@ namespace SMM {
 
 	}
 
-	inline CSRConstRowIterator CSRConstRowIterator::operator++(int) noexcept {
+	template<typename MatrixPtrT>
+	inline CSRConstRowIterator<MatrixPtrT>& CSRConstRowIterator<MatrixPtrT>::operator++() noexcept {
+		const int row = getRow();
+		const int nextRowStart = getRowStartPointer(row + 1);
+		const int columnPointer = getColumnPointer() + 1;
+		setColumnPointer(columnPointer);
+		assert(columnPointer <= nextRowStart);
+		if (columnPointer == nextRowStart) {
+			setRow(row + 1);
+		}
+		return *this;
+	}
+
+	template<typename MatrixPtrT>
+	inline CSRConstRowIterator<MatrixPtrT> CSRConstRowIterator<MatrixPtrT>::operator++(int) noexcept {
 		CSRConstRowIterator initialState = *this;
 		++(*this);
 		return initialState;
 	}
 
-	inline void swap(CSRConstRowIterator& a, CSRConstRowIterator& b) noexcept {
+	template<typename MatrixPtrT>
+	inline void swap(CSRConstRowIterator<MatrixPtrT>& a, CSRConstRowIterator<MatrixPtrT>& b) noexcept {
 		swap(a.currentElement, b.currentElement);
 	}
 
@@ -707,12 +755,12 @@ namespace SMM {
 	class CSRMatrix {
 	public:
 		using ConstIterator = CSRConstIterator;
-		using ConstRowIterator = CSRConstRowIterator;
+		using ConstRowIterator = CSRConstRowIterator<const CSRMatrix*>;
 
 		friend class CSRConstIterator;
 		friend class _CSRIteratorBase<const CSRMatrix*>;
 		friend class _CSRIteratorBase<CSRMatrix*>;
-		friend class CSRConstRowIterator;
+		friend class CSRConstRowIterator<const CSRMatrix*>;
 
 		CSRMatrix() noexcept;
 		CSRMatrix(const TripletMatrix& triplet) noexcept;
@@ -1610,27 +1658,6 @@ namespace SMM {
 			}
 		}
 		return 0;
-	}
-
-	inline CSRConstIterator& CSRConstIterator::operator++() noexcept {
-		currentElement.currentPositionIndex++;
-		int startIndex = currentElement.currentStartIndex;
-		const int posIndex = currentElement.currentPositionIndex;
-		assert(posIndex <= currentElement.m->start[startIndex + 1]);
-		while(startIndex < denseRowCount && posIndex == currentElement.m->start[startIndex + 1]) {
-			startIndex++;
-		}
-		currentElement.currentStartIndex = startIndex;
-		return *this;
-	}
-
-	inline CSRConstRowIterator& CSRConstRowIterator::operator++() noexcept {
-		currentElement.currentPositionIndex++;
-		assert(currentElement.currentPositionIndex <= currentElement.m->start[currentElement.currentStartIndex + 1]);
-		if (currentElement.currentPositionIndex == currentElement.m->start[currentElement.currentStartIndex + 1]) {
-			currentElement.currentStartIndex++;
-		}
-		return *this;
 	}
 
 	inline void saveDenseText(const char* filepath, const CSRMatrix& m) {
