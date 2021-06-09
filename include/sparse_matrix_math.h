@@ -513,6 +513,7 @@ namespace SMM {
 	class _CSRIteratorBase {
 	public:
 
+		friend class _CSRIteratorBase<make_ptr_to_const_t<MatrixPtrT>>;
 		class CSRElement {
 		public:
 			friend class _CSRIteratorBase<MatrixPtrT>;
@@ -563,6 +564,8 @@ namespace SMM {
 		const bool operator!=(const _CSRIteratorBase& other) const noexcept;
 		reference operator*() const;
 		pointer operator->() const;
+		reference operator*();
+		pointer operator->();
 	protected:
 		int getColumnPointer() const {
 			return currentElement.currentPositionIndex;
@@ -606,6 +609,16 @@ namespace SMM {
 
 	template<typename MatrixPtrT>
 	inline typename _CSRIteratorBase<MatrixPtrT>::pointer _CSRIteratorBase<MatrixPtrT>::operator->() const {
+		return &currentElement;
+	}
+
+	template<typename MatrixPtrT>
+	inline typename _CSRIteratorBase<MatrixPtrT>::reference _CSRIteratorBase<MatrixPtrT>::operator*() {
+		return currentElement;
+	}
+
+	template<typename MatrixPtrT>
+	inline typename _CSRIteratorBase<MatrixPtrT>::pointer _CSRIteratorBase<MatrixPtrT>::operator->() {
 		return &currentElement;
 	}
 
@@ -836,19 +849,54 @@ namespace SMM {
 		/// @returns True if the two matrices share the same nonzero pattern
 		bool hasSameNonZeroPattern(const CSRMatrix& other);
 
+		// ********************************************************************
+		// ************************ GENERAL ITERATOR **************************
+		// ********************************************************************
+
 		/// Iterator to the first element of the matrix
-		ConstIterator begin() const noexcept;
+		Iterator begin() noexcept;
 		/// @brief Iterator to one element past the end of the matrix
 		/// It is undefined to dereference this iterator. Use it only in loop checks.
+		Iterator end() noexcept;
+		/// Constant iterator to the first element of the matrix
+		ConstIterator begin() const noexcept;
+		/// @brief Constant iterator to one element past the end of the matrix
+		/// It is undefined to dereference this iterator. Use it only in loop checks.
 		ConstIterator end() const noexcept;
+		/// Constant iterator to the first element of the matrix
+		ConstIterator cbegin() const noexcept;
+		/// @brief Constant iterator to one element past the end of the matrix
+		/// It is undefined to dereference this iterator. Use it only in loop checks.
+		ConstIterator cend() const noexcept;
+
+		// ********************************************************************
+		// **************************** ROW ITERATOR **************************
+		// ********************************************************************
+
 		/// Return an iterator to the beggining of a row.
 		/// @param[in] i The index of the row to which iterator will be given. Must be in range [0;denseRowCount]
 		/// @returns Iterator to the i-th row
-		ConstRowIterator rowBegin(const int i) const noexcept;
+		RowIterator rowBegin(const int i) noexcept;
 		/// Return an iterator one past the last element of a row. Dereferencing this iterator is undefined behavior
 		/// @param[in] i The row which end iterator will be given. Must be [0;denseRowCount]
 		/// @returns Iterator one past the last element of the i-th row. Dereferencing this is undefined behavior
+		RowIterator rowEnd(const int i) noexcept;
+		/// Return a constant iterator to the beggining of a row.
+		/// @param[in] i The index of the row to which iterator will be given. Must be in range [0;denseRowCount]
+		/// @returns Iterator to the i-th row
+		ConstRowIterator rowBegin(const int i) const noexcept;
+		/// Return a constant iterator one past the last element of a row. Dereferencing this iterator is undefined behavior
+		/// @param[in] i The row which end iterator will be given. Must be [0;denseRowCount]
+		/// @returns Iterator one past the last element of the i-th row. Dereferencing this is undefined behavior
 		ConstRowIterator rowEnd(const int i) const noexcept;
+		/// Return a constant iterator to the beggining of a row.
+		/// @param[in] i The index of the row to which iterator will be given. Must be in range [0;denseRowCount]
+		/// @returns Iterator to the i-th row
+		ConstRowIterator crowBegin(const int i) const noexcept;
+		/// Return a constant iterator one past the last element of a row. Dereferencing this iterator is undefined behavior
+		/// @param[in] i The row which end iterator will be given. Must be [0;denseRowCount]
+		/// @returns Iterator one past the last element of the i-th row. Dereferencing this is undefined behavior
+		ConstRowIterator crowEnd(const int i) const noexcept;
 
 		/// @brief Perform matrix vector multiplication out = A * mult
 		/// Where A is the current CSR matrix
@@ -1172,12 +1220,33 @@ namespace SMM {
 		return true;
 	}
 
+	inline CSRMatrix::Iterator CSRMatrix::begin() noexcept {
+		return Iterator(this, firstActiveStart, 0);
+	}
+	
 	inline CSRMatrix::ConstIterator CSRMatrix::begin() const noexcept {
 		return ConstIterator(this, firstActiveStart, 0);
 	}
 
+	inline CSRMatrix::ConstIterator CSRMatrix::cbegin() const noexcept {
+		return ConstIterator(this, firstActiveStart, 0);
+	}
+
+	inline CSRMatrix::Iterator CSRMatrix::end() noexcept {
+		return Iterator(this, denseRowCount, start[denseRowCount]);
+	}
+
 	inline CSRMatrix::ConstIterator CSRMatrix::end() const noexcept {
 		return ConstIterator(this, denseRowCount, start[denseRowCount]);
+	}
+
+	inline CSRMatrix::ConstIterator CSRMatrix::cend() const noexcept {
+		return ConstIterator(this, denseRowCount, start[denseRowCount]);
+	}
+
+	inline CSRMatrix::RowIterator CSRMatrix::rowBegin(const int i) noexcept {
+		assert(i < denseRowCount);
+		return RowIterator(this, i, start[i]);
 	}
 
 	inline CSRMatrix::ConstRowIterator CSRMatrix::rowBegin(const int i) const noexcept {
@@ -1185,7 +1254,24 @@ namespace SMM {
 		return ConstRowIterator(this, i, start[i]);
 	}
 
+	inline CSRMatrix::ConstRowIterator CSRMatrix::crowBegin(const int i) const noexcept {
+		assert(i < denseRowCount);
+		return ConstRowIterator(this, i, start[i]);
+	}
+
+	inline CSRMatrix::RowIterator CSRMatrix::rowEnd(const int i) noexcept {
+		assert(i < denseRowCount);
+		if(start[i] == start[i+1]) return rowBegin(i);
+		return RowIterator(this, i + 1, start[i + 1]);
+	}
+
 	inline CSRMatrix::ConstRowIterator CSRMatrix::rowEnd(const int i) const noexcept {
+		assert(i < denseRowCount);
+		if(start[i] == start[i+1]) return rowBegin(i);
+		return ConstRowIterator(this, i + 1, start[i + 1]);
+	}
+
+	inline CSRMatrix::ConstRowIterator CSRMatrix::crowEnd(const int i) const noexcept {
 		assert(i < denseRowCount);
 		if(start[i] == start[i+1]) return rowBegin(i);
 		return ConstRowIterator(this, i + 1, start[i + 1]);
