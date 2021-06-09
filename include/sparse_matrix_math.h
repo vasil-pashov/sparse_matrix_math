@@ -489,11 +489,21 @@ namespace SMM {
 		CSC ///< (C)ompressed (S)parse (C)olumn
 	};
 
-	template <typename T>
-  	struct is_ptr_to_const : std::false_type {}; 
 
-  	template <typename T>
-  	struct is_ptr_to_const<const T*> : std::true_type {}; 
+	template<typename T>
+	struct is_ptr_to_const : std::conjunction<
+	    std::is_pointer<T>,
+	    std::is_const<std::remove_pointer_t<T>>
+	> {};
+
+	template<typename TPtr, typename T = std::enable_if_t<std::is_pointer_v<TPtr>, std::remove_pointer_t<TPtr>>>
+	struct make_ptr_to_const {
+		typedef std::conditional_t<std::is_const_v<TPtr>, std::add_const_t<const T*>, const T*> type;
+	};
+
+	template<typename T>
+	using  make_ptr_to_const_t = typename make_ptr_to_const<T>::type;
+
 
 	/// @brief Base class for const forward iterator for matrix in compressed sparse row format
 	template<typename MatrixPtrT>
