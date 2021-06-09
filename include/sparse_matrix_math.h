@@ -652,7 +652,7 @@ namespace SMM {
 
 	template<typename MatrixPtrT>
 	inline void _CSRIteratorBase<MatrixPtrT>::CSRElement::setValue(const real value) noexcept {
-		return m->values[currentPositionIndex] = value;
+		m->values[currentPositionIndex] = value;
 	}
 
 	template<typename MatrixPtrT>
