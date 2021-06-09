@@ -496,6 +496,9 @@ namespace SMM {
 	    std::is_const<std::remove_pointer_t<T>>
 	> {};
 
+	template<typename T>
+	static inline constexpr bool is_ptr_to_const_t = is_ptr_to_const<T>::value;
+
 	template<typename TPtr, typename T = std::enable_if_t<std::is_pointer_v<TPtr>, std::remove_pointer_t<TPtr>>>
 	struct make_ptr_to_const {
 		typedef std::conditional_t<std::is_const_v<TPtr>, std::add_const_t<const T*>, const T*> type;
@@ -513,6 +516,7 @@ namespace SMM {
 		class CSRElement {
 		public:
 			friend class _CSRIteratorBase<MatrixPtrT>;
+			friend class _CSRIteratorBase<make_ptr_to_const_t<MatrixPtrT>>;
 			const real getValue() const noexcept;
 			const int getRow() const noexcept;
 			const int getCol() const noexcept;
@@ -529,6 +533,7 @@ namespace SMM {
 			const bool operator==(const CSRElement&) const;
 
 		protected:
+			/// Pointer to the sparse matrix whose element this is
 			MatrixPtrT m;
 			/// Index into start for the element which the iterator is pointing to
 			int currentStartIndex;
@@ -546,6 +551,12 @@ namespace SMM {
 			const int currentStartIndex,
 			const int currentPositionIndex
 		) noexcept;
+
+		template<typename Other, typename = std::enable_if_t<!is_ptr_to_const_t<Other> || is_ptr_to_const_t<MatrixPtrT>>>
+		_CSRIteratorBase(const _CSRIteratorBase<Other>& other) :
+			currentElement(other.currentElement.m, other.currentElement.currentStartIndex, other.currentElement.currentPositionIndex)
+		{}
+
 		_CSRIteratorBase(const _CSRIteratorBase&) = default;
 		_CSRIteratorBase& operator=(const _CSRIteratorBase&) = default;
 		const bool operator==(const _CSRIteratorBase& other) const noexcept;
@@ -669,6 +680,12 @@ namespace SMM {
 			const int currentStartIndex,
 			const int currentPositionIndex
 		) noexcept;
+
+		template<typename Other, typename = std::enable_if_t<!is_ptr_to_const_t<Other> || is_ptr_to_const_t<MatrixPtrT>>>
+		CSRIterator(const CSRIterator<Other>& other) :
+			_CSRIteratorBase<MatrixPtrT>(other)
+		{}
+
 		CSRIterator& operator++() noexcept;
 		CSRIterator operator++(int) noexcept;
 		friend void swap(CSRIterator& a, CSRIterator& b) noexcept;
@@ -720,6 +737,12 @@ namespace SMM {
 			const int currentStartIndex,
 			const int currentPositionIndex
 		) noexcept;
+
+		template<typename Other, typename = std::enable_if_t<!is_ptr_to_const_t<Other> || is_ptr_to_const_t<MatrixPtrT>>>
+		CSRRowIterator(const CSRRowIterator<Other>& other) :
+			_CSRIteratorBase<MatrixPtrT>(other)
+		{}
+
 		CSRRowIterator& operator++() noexcept;
 		CSRRowIterator operator++(int) noexcept;
 		friend void swap(CSRRowIterator& a, CSRRowIterator& b) noexcept;
@@ -772,10 +795,11 @@ namespace SMM {
 	/// one to keep track nonzero columns for each row, one to keep track where each row
 	class CSRMatrix {
 	public:
-		using ConstIterator = CSRIterator<const CSRMatrix*>;
 		using Iterator = CSRIterator<CSRMatrix*>;
-		using ConstRowIterator = CSRRowIterator<const CSRMatrix*>;
+		using ConstIterator = CSRIterator<const CSRMatrix*>;
+
 		using RowIterator = CSRRowIterator<CSRMatrix*>;
+		using ConstRowIterator = CSRRowIterator<const CSRMatrix*>;
 
 		friend class _CSRIteratorBase<const CSRMatrix*>;
 		friend class _CSRIteratorBase<CSRMatrix*>;
@@ -1058,6 +1082,20 @@ namespace SMM {
 			return rhs;
 		}
 	};
+
+	static_assert(std::is_convertible_v<CSRMatrix::ConstIterator, CSRMatrix::ConstIterator>);
+	static_assert(std::is_convertible_v<CSRMatrix::Iterator, CSRMatrix::ConstIterator>);
+	static_assert(! std::is_convertible_v<CSRMatrix::ConstIterator, CSRMatrix::Iterator>);
+	static_assert(std::is_convertible_v<CSRMatrix::Iterator, CSRMatrix::Iterator>);
+	static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::ConstIterator>);
+	static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::Iterator>);
+
+	static_assert(std::is_convertible_v<CSRMatrix::ConstRowIterator, CSRMatrix::ConstRowIterator>);
+	static_assert(std::is_convertible_v<CSRMatrix::RowIterator, CSRMatrix::ConstRowIterator>);
+	static_assert(! std::is_convertible_v<CSRMatrix::ConstRowIterator, CSRMatrix::RowIterator>);
+	static_assert(std::is_convertible_v<CSRMatrix::RowIterator, CSRMatrix::RowIterator>);
+	static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::ConstRowIterator>);
+	static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::RowIterator>);
 
 	inline CSRMatrix::CSRMatrix() noexcept :
 		values(nullptr),
