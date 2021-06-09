@@ -489,234 +489,311 @@ namespace SMM {
 		CSC ///< (C)ompressed (S)parse (C)olumn
 	};
 
-	class CSRElement {
+
+	template<typename T>
+	struct is_ptr_to_const : std::conjunction<
+	    std::is_pointer<T>,
+	    std::is_const<std::remove_pointer_t<T>>
+	> {};
+
+	template<typename T>
+	static inline constexpr bool is_ptr_to_const_t = is_ptr_to_const<T>::value;
+
+	template<typename TPtr, typename T = std::enable_if_t<std::is_pointer_v<TPtr>, std::remove_pointer_t<TPtr>>>
+	struct make_ptr_to_const {
+		typedef std::conditional_t<std::is_const_v<TPtr>, std::add_const_t<const T*>, const T*> type;
+	};
+
+	template<typename T>
+	using  make_ptr_to_const_t = typename make_ptr_to_const<T>::type;
+
+
+	/// @brief Base class for const forward iterator for matrix in compressed sparse row format
+	template<typename MatrixPtrT>
+	class _CSRIteratorBase {
 	public:
-		const real getValue() const noexcept;
-		const int getRow() const noexcept;
-		const int getCol() const noexcept;
-		friend void swap(CSRElement& a, CSRElement& b) noexcept;
-		friend class _CSRConstIteratorBase;
-		friend class CSRConstIterator;
-		friend class CSRConstRowIterator;
-	protected:
-		CSRElement(
-			const real* values,
-			const int* positions,
-			const int* start,
+
+		friend class _CSRIteratorBase<make_ptr_to_const_t<MatrixPtrT>>;
+		class CSRElement {
+		public:
+			friend class _CSRIteratorBase<MatrixPtrT>;
+			friend class _CSRIteratorBase<make_ptr_to_const_t<MatrixPtrT>>;
+			const real getValue() const noexcept;
+			const int getRow() const noexcept;
+			const int getCol() const noexcept;
+			void setValue(real value) noexcept;
+			friend void swap(CSRElement& a, CSRElement& b) noexcept;
+			CSRElement(
+				MatrixPtrT m,
+				const int currentStartIndex,
+				const int currentPositionIndex
+			) noexcept;
+
+			CSRElement(const CSRElement&) = default;
+			CSRElement& operator=(const CSRElement&) = default;
+			const bool operator==(const CSRElement&) const;
+
+		protected:
+			/// Pointer to the sparse matrix whose element this is
+			MatrixPtrT m;
+			/// Index into start for the element which the iterator is pointing to
+			int currentStartIndex;
+			/// Index into positions for the element which the iterator is pointing to
+			int currentPositionIndex;
+		};
+
+		using iterator_category = std::forward_iterator_tag;
+		using value_type = CSRElement;
+		using pointer = std::conditional_t<is_ptr_to_const<MatrixPtrT>::value, const CSRElement*, CSRElement*>;
+		using reference = std::conditional_t<is_ptr_to_const<MatrixPtrT>::value, const CSRElement&, CSRElement&>;
+
+		_CSRIteratorBase(
+			MatrixPtrT m,
 			const int currentStartIndex,
 			const int currentPositionIndex
 		) noexcept;
 
-		CSRElement(const CSRElement&) = default;
-		CSRElement& operator=(const CSRElement&) = default;
-		const bool operator==(const CSRElement&) const;
+		template<typename Other, typename = std::enable_if_t<!is_ptr_to_const_t<Other> || is_ptr_to_const_t<MatrixPtrT>>>
+		_CSRIteratorBase(const _CSRIteratorBase<Other>& other) :
+			currentElement(other.currentElement.m, other.currentElement.currentStartIndex, other.currentElement.currentPositionIndex)
+		{}
 
-		/// Non owning pointer to the list of non zero elements of the matrix
-		const real* values;
-		/// If format is CSR this is the column if the i-th value
-		/// If format is CSC this is the row of the i-th value
-		const int* positions;
-		/// If format is CSR i-th element is index in positions and values where the i-th row starts
-		/// If format is CSC i-th element is index in positions and values where the i-th column starts
-		const int* start;
-		/// Index into start for the element which the iterator is pointing to
-		int currentStartIndex;
-		/// Index into positions for the element which the iterator is pointing to
-		int currentPositionIndex;
+		_CSRIteratorBase(const _CSRIteratorBase&) = default;
+		_CSRIteratorBase& operator=(const _CSRIteratorBase&) = default;
+		const bool operator==(const _CSRIteratorBase& other) const noexcept;
+		const bool operator!=(const _CSRIteratorBase& other) const noexcept;
+		reference operator*() const;
+		pointer operator->() const;
+		reference operator*();
+		pointer operator->();
+	protected:
+		int getColumnPointer() const {
+			return currentElement.currentPositionIndex;
+		}
+		void setColumnPointer(int cp) {
+			assert(cp >= 0 && cp <= currentElement.m->getNonZeroCount());
+			currentElement.currentPositionIndex = cp;
+		}
+		int getRow() const {
+			return currentElement.currentStartIndex;
+		}
+		void setRow(int row) {
+			assert(row >= 0 && row <= currentElement.m->getDenseRowCount());
+			currentElement.currentStartIndex = row;
+		}
+		int getColumn() {
+			return currentElement.m[currentElement.currentPositionIndex];
+		}
+		int getRowStartPointer(int row) {
+			return currentElement.m->start[row];
+		}
+		int getDenseRowCount() const {
+			return currentElement.m->getDenseRowCount();
+		}
+		CSRElement currentElement;
 	};
 
-	inline CSRElement::CSRElement(
-		const real* values,
-		const int* positions,
-		const int* start,
+	template<typename MatrixPtrT>
+	inline _CSRIteratorBase<MatrixPtrT>::_CSRIteratorBase(
+		MatrixPtrT m,
 		const int currentStartIndex,
 		const int currentPositionIndex
 	) noexcept :
-		values(values),
-		positions(positions),
-		start(start),
+		currentElement(m, currentStartIndex, currentPositionIndex)
+	{ }
+
+	template<typename MatrixPtrT>
+	inline typename _CSRIteratorBase<MatrixPtrT>::reference _CSRIteratorBase<MatrixPtrT>::operator*() const {
+		return currentElement;
+	}
+
+	template<typename MatrixPtrT>
+	inline typename _CSRIteratorBase<MatrixPtrT>::pointer _CSRIteratorBase<MatrixPtrT>::operator->() const {
+		return &currentElement;
+	}
+
+	template<typename MatrixPtrT>
+	inline typename _CSRIteratorBase<MatrixPtrT>::reference _CSRIteratorBase<MatrixPtrT>::operator*() {
+		return currentElement;
+	}
+
+	template<typename MatrixPtrT>
+	inline typename _CSRIteratorBase<MatrixPtrT>::pointer _CSRIteratorBase<MatrixPtrT>::operator->() {
+		return &currentElement;
+	}
+
+	template<typename MatrixPtrT>
+	inline const bool _CSRIteratorBase<MatrixPtrT>::operator==(const _CSRIteratorBase<MatrixPtrT>& other) const noexcept {
+		return currentElement == other.currentElement;
+	}
+
+	template<typename MatrixPtrT>
+	inline const bool _CSRIteratorBase<MatrixPtrT>::operator!=(const _CSRIteratorBase<MatrixPtrT>& other) const noexcept {
+		return !(*this == other);
+	}
+
+	template<typename MatrixPtrT>
+	inline _CSRIteratorBase<MatrixPtrT>::CSRElement::CSRElement(
+		MatrixPtrT m,
+		const int currentStartIndex,
+		const int currentPositionIndex
+	) noexcept :
+		m(m),
 		currentStartIndex(currentStartIndex),
-		currentPositionIndex(currentPositionIndex) {
+		currentPositionIndex(currentPositionIndex)
+	{
+		static_assert(std::is_pointer_v<MatrixPtrT>, "Only pointer are allowed as matrix type templates.");
 	}
 
-	inline const real CSRElement::getValue() const noexcept {
-		return values[currentPositionIndex];
+	template<typename MatrixPtrT>
+	inline const real _CSRIteratorBase<MatrixPtrT>::CSRElement::getValue() const noexcept {
+		return m->values[currentPositionIndex];
 	}
 
-	inline const int CSRElement::getRow() const noexcept {
+	template<typename MatrixPtrT>
+	inline void _CSRIteratorBase<MatrixPtrT>::CSRElement::setValue(const real value) noexcept {
+		m->values[currentPositionIndex] = value;
+	}
+
+	template<typename MatrixPtrT>
+	inline const int _CSRIteratorBase<MatrixPtrT>::CSRElement::getRow() const noexcept {
 		return currentStartIndex;
 	}
-	inline const int CSRElement::getCol() const noexcept {
-		return positions[currentPositionIndex];
+
+	template<typename MatrixPtrT>
+	inline const int _CSRIteratorBase<MatrixPtrT>::CSRElement::getCol() const noexcept {
+		return m->positions[currentPositionIndex];
 	}
 
-	inline void swap(CSRElement& a, CSRElement& b) noexcept {
+	template<typename MatrixPtrT>
+	inline void swap(
+		typename _CSRIteratorBase<MatrixPtrT>::CSRElement& a,
+		typename _CSRIteratorBase<MatrixPtrT>::CSRElement& b
+	) noexcept {
 		using std::swap;
-		swap(a.values, b.values);
-		swap(a.positions, b.positions);
-		swap(a.start, b.start);
+		swap(a.m, b.m);
 		swap(a.currentStartIndex, b.currentStartIndex);
 		swap(a.currentPositionIndex, b.currentPositionIndex);
 	}
 
-	inline const bool CSRElement::operator==(const CSRElement& other) const {
-		return other.values == values &&
-			other.positions == positions &&
-			other.start == start &&
+	template<typename MatrixPtrT>
+	inline const bool _CSRIteratorBase<MatrixPtrT>::CSRElement::operator==(const _CSRIteratorBase<MatrixPtrT>::CSRElement& other) const {
+		return m == other.m&&
 			other.currentStartIndex == currentStartIndex &&
 			other.currentPositionIndex == currentPositionIndex;
 	}
 
-	class _CSRConstIteratorBase {
+	/// Forward iterator, which iterates over all elements of the matrix
+	/// The rows are guaranteed to be iterated in an increasing order
+	template<typename MatrixPtrT>
+	class CSRIterator : public _CSRIteratorBase<MatrixPtrT> {
 	public:
-		using iterator_category = std::forward_iterator_tag;
-		using value_type = CSRElement;
-		using pointer = const CSRElement*;
-		using reference = const CSRElement&;
-
-		_CSRConstIteratorBase(
-			const real* values,
-			const int* positions,
-			const int* start,
+		CSRIterator(
+			MatrixPtrT m,
 			const int currentStartIndex,
 			const int currentPositionIndex
 		) noexcept;
-		_CSRConstIteratorBase(const _CSRConstIteratorBase&) = default;
-		_CSRConstIteratorBase& operator=(const _CSRConstIteratorBase&) = default;
-		const bool operator==(const _CSRConstIteratorBase& other) const noexcept;
-		const bool operator!=(const _CSRConstIteratorBase& other) const noexcept;
-		reference operator*() const;
-		pointer operator->() const;
-	protected:
-		CSRElement currentElement;
+
+		template<typename Other, typename = std::enable_if_t<!is_ptr_to_const_t<Other> || is_ptr_to_const_t<MatrixPtrT>>>
+		CSRIterator(const CSRIterator<Other>& other) :
+			_CSRIteratorBase<MatrixPtrT>(other)
+		{}
+
+		CSRIterator& operator++() noexcept;
+		CSRIterator operator++(int) noexcept;
+		friend void swap(CSRIterator& a, CSRIterator& b) noexcept;
 	};
 
-	/// @brief Base class for const forward iterator for matrix in compressed sparse row format
-	inline _CSRConstIteratorBase::_CSRConstIteratorBase(
-		const real* values,
-		const int* positions,
-		const int* start,
+	template<typename MatrixPtrT>
+	inline CSRIterator<MatrixPtrT>::CSRIterator(
+		MatrixPtrT m,
 		const int currentStartIndex,
 		const int currentPositionIndex
 	) noexcept :
-		currentElement(values, positions, start, currentStartIndex, currentPositionIndex)
-	{ }
-
-	inline typename _CSRConstIteratorBase::reference _CSRConstIteratorBase::operator*() const {
-		return currentElement;
-	}
-
-	inline typename _CSRConstIteratorBase::pointer _CSRConstIteratorBase::operator->() const {
-		return &currentElement;
-	}
-
-	inline const bool _CSRConstIteratorBase::operator==(const _CSRConstIteratorBase& other) const noexcept {
-		return currentElement == other.currentElement;
-	}
-
-	inline const bool _CSRConstIteratorBase::operator!=(const _CSRConstIteratorBase& other) const noexcept {
-		return !(*this == other);
-	}
-
-	/// Forward iterator, which iterates over all elements of the matrix
-	/// The rows are guaranteed to be iterated in an increasing order
-	class CSRConstIterator : public _CSRConstIteratorBase {
-	public:
-		CSRConstIterator(
-			const real* values,
-			const int* positions,
-			const int* start,
-			const int currentStartIndex,
-			const int currentPositionIndex,
-			const int denseRowCount
-		) noexcept;
-		CSRConstIterator& operator++() noexcept;
-		CSRConstIterator operator++(int) noexcept;
-		friend void swap(CSRConstIterator& a, CSRConstIterator& b) noexcept;
-	private:
-		/// Total number of rows in the matrix
-		int denseRowCount;
-	};
-
-	inline CSRConstIterator::CSRConstIterator(
-		const real* values,
-		const int* positions,
-		const int* start,
-		const int currentStartIndex,
-		const int currentPositionIndex,
-		const int denseRowCount
-	) noexcept :
-		_CSRConstIteratorBase(values, positions, start, currentStartIndex, currentPositionIndex),
-		denseRowCount(denseRowCount)
+		_CSRIteratorBase<MatrixPtrT>(m, currentStartIndex, currentPositionIndex)
 	{
 
 	}
 
-	inline CSRConstIterator& CSRConstIterator::operator++() noexcept {
-		currentElement.currentPositionIndex++;
-		int startIndex = currentElement.currentStartIndex;
-		const int posIndex = currentElement.currentPositionIndex;
-		assert(posIndex <= currentElement.start[startIndex + 1]);
-		while(startIndex < denseRowCount && posIndex == currentElement.start[startIndex + 1]) {
-			startIndex++;
+	template<typename MatrixPtrT>
+	inline CSRIterator<MatrixPtrT>& CSRIterator<MatrixPtrT>::operator++() noexcept {
+		const int currentColumnPointer = this->getColumnPointer() + 1;
+		this->setColumnPointer(currentColumnPointer);
+		int currentRow = this->getRow();
+		assert(currentColumnPointer <= this->getRowStartPointer(currentRow + 1));
+		while(currentRow < this->getDenseRowCount() && currentColumnPointer == this->getRowStartPointer(currentRow + 1)) {
+			currentRow++;
 		}
-		currentElement.currentStartIndex = startIndex;
+		this->setRow(currentRow);
 		return *this;
 	}
 
-	inline CSRConstIterator CSRConstIterator::operator++(int) noexcept {
-		CSRConstIterator initialState = *this;
+	template<typename MatrixPtrT>
+	inline CSRIterator<MatrixPtrT> CSRIterator<MatrixPtrT>::operator++(int) noexcept {
+		CSRIterator initialState = *this;
 		++(*this);
 		return initialState;
 	}
 
-	inline void swap(CSRConstIterator& a, CSRConstIterator& b) noexcept {
+	template<typename MatrixPtrT>
+	inline void swap(CSRIterator<MatrixPtrT>& a, CSRIterator<MatrixPtrT>& b) noexcept {
 		swap(a.currentElement, b.currentElement);
 		std::swap(a.denseRowCount, b.denseRowCount);
 	}
 
-	class CSRConstRowIterator : public _CSRConstIteratorBase {
+	
+	template<typename MatrixPtrT>
+	class CSRRowIterator : public _CSRIteratorBase<MatrixPtrT> {
 	public:
-		CSRConstRowIterator(
-			const real* values,
-			const int* positions,
-			const int* start,
+		CSRRowIterator(
+			MatrixPtrT m,
 			const int currentStartIndex,
 			const int currentPositionIndex
 		) noexcept;
-		CSRConstRowIterator& operator++() noexcept;
-		CSRConstRowIterator operator++(int) noexcept;
-		friend void swap(CSRConstRowIterator& a, CSRConstRowIterator& b) noexcept;
+
+		template<typename Other, typename = std::enable_if_t<!is_ptr_to_const_t<Other> || is_ptr_to_const_t<MatrixPtrT>>>
+		CSRRowIterator(const CSRRowIterator<Other>& other) :
+			_CSRIteratorBase<MatrixPtrT>(other)
+		{}
+
+		CSRRowIterator& operator++() noexcept;
+		CSRRowIterator operator++(int) noexcept;
+		friend void swap(CSRRowIterator& a, CSRRowIterator& b) noexcept;
 	};
 
-	inline CSRConstRowIterator::CSRConstRowIterator(
-		const real* values,
-		const int* positions,
-		const int* start,
+	template<typename MatrixPtrT>
+	inline CSRRowIterator<MatrixPtrT>::CSRRowIterator(
+		MatrixPtrT m,
 		const int currentStartIndex,
 		const int currentPositionIndex
 	) noexcept :
-		_CSRConstIteratorBase(values, positions, start, currentStartIndex, currentPositionIndex)
+		_CSRIteratorBase<MatrixPtrT>(m, currentStartIndex, currentPositionIndex)
 	{
 
 	}
 
-	inline CSRConstRowIterator& CSRConstRowIterator::operator++() noexcept {
-		currentElement.currentPositionIndex++;
-		assert(currentElement.currentPositionIndex <= currentElement.start[currentElement.currentStartIndex + 1]);
-		if (currentElement.currentPositionIndex == currentElement.start[currentElement.currentStartIndex + 1]) {
-			currentElement.currentStartIndex++;
+	template<typename MatrixPtrT>
+	inline CSRRowIterator<MatrixPtrT>& CSRRowIterator<MatrixPtrT>::operator++() noexcept {
+		const int row = this->getRow();
+		const int nextRowStart = this->getRowStartPointer(row + 1);
+		const int columnPointer = this->getColumnPointer() + 1;
+		this->setColumnPointer(columnPointer);
+		assert(columnPointer <= nextRowStart);
+		if (columnPointer == nextRowStart) {
+			this->setRow(row + 1);
 		}
 		return *this;
 	}
 
-	inline CSRConstRowIterator CSRConstRowIterator::operator++(int) noexcept {
-		CSRConstRowIterator initialState = *this;
+	template<typename MatrixPtrT>
+	inline CSRRowIterator<MatrixPtrT> CSRRowIterator<MatrixPtrT>::operator++(int) noexcept {
+		CSRRowIterator initialState = *this;
 		++(*this);
 		return initialState;
 	}
 
-	inline void swap(CSRConstRowIterator& a, CSRConstRowIterator& b) noexcept {
+	template<typename MatrixPtrT>
+	inline void swap(CSRRowIterator<MatrixPtrT>& a, CSRRowIterator<MatrixPtrT>& b) noexcept {
 		swap(a.currentElement, b.currentElement);
 	}
 
@@ -731,8 +808,14 @@ namespace SMM {
 	/// one to keep track nonzero columns for each row, one to keep track where each row
 	class CSRMatrix {
 	public:
-		using ConstIterator = CSRConstIterator;
-		using ConstRowIterator = CSRConstRowIterator;
+		using Iterator = CSRIterator<CSRMatrix*>;
+		using ConstIterator = CSRIterator<const CSRMatrix*>;
+
+		using RowIterator = CSRRowIterator<CSRMatrix*>;
+		using ConstRowIterator = CSRRowIterator<const CSRMatrix*>;
+
+		friend class _CSRIteratorBase<const CSRMatrix*>;
+		friend class _CSRIteratorBase<CSRMatrix*>;
 
 		CSRMatrix() noexcept;
 		CSRMatrix(const TripletMatrix& triplet) noexcept;
@@ -766,19 +849,54 @@ namespace SMM {
 		/// @returns True if the two matrices share the same nonzero pattern
 		bool hasSameNonZeroPattern(const CSRMatrix& other);
 
+		// ********************************************************************
+		// ************************ GENERAL ITERATOR **************************
+		// ********************************************************************
+
 		/// Iterator to the first element of the matrix
-		ConstIterator begin() const noexcept;
+		Iterator begin() noexcept;
 		/// @brief Iterator to one element past the end of the matrix
 		/// It is undefined to dereference this iterator. Use it only in loop checks.
+		Iterator end() noexcept;
+		/// Constant iterator to the first element of the matrix
+		ConstIterator begin() const noexcept;
+		/// @brief Constant iterator to one element past the end of the matrix
+		/// It is undefined to dereference this iterator. Use it only in loop checks.
 		ConstIterator end() const noexcept;
+		/// Constant iterator to the first element of the matrix
+		ConstIterator cbegin() const noexcept;
+		/// @brief Constant iterator to one element past the end of the matrix
+		/// It is undefined to dereference this iterator. Use it only in loop checks.
+		ConstIterator cend() const noexcept;
+
+		// ********************************************************************
+		// **************************** ROW ITERATOR **************************
+		// ********************************************************************
+
 		/// Return an iterator to the beggining of a row.
 		/// @param[in] i The index of the row to which iterator will be given. Must be in range [0;denseRowCount]
 		/// @returns Iterator to the i-th row
-		ConstRowIterator rowBegin(const int i) const noexcept;
+		RowIterator rowBegin(const int i) noexcept;
 		/// Return an iterator one past the last element of a row. Dereferencing this iterator is undefined behavior
 		/// @param[in] i The row which end iterator will be given. Must be [0;denseRowCount]
 		/// @returns Iterator one past the last element of the i-th row. Dereferencing this is undefined behavior
+		RowIterator rowEnd(const int i) noexcept;
+		/// Return a constant iterator to the beggining of a row.
+		/// @param[in] i The index of the row to which iterator will be given. Must be in range [0;denseRowCount]
+		/// @returns Iterator to the i-th row
+		ConstRowIterator rowBegin(const int i) const noexcept;
+		/// Return a constant iterator one past the last element of a row. Dereferencing this iterator is undefined behavior
+		/// @param[in] i The row which end iterator will be given. Must be [0;denseRowCount]
+		/// @returns Iterator one past the last element of the i-th row. Dereferencing this is undefined behavior
 		ConstRowIterator rowEnd(const int i) const noexcept;
+		/// Return a constant iterator to the beggining of a row.
+		/// @param[in] i The index of the row to which iterator will be given. Must be in range [0;denseRowCount]
+		/// @returns Iterator to the i-th row
+		ConstRowIterator crowBegin(const int i) const noexcept;
+		/// Return a constant iterator one past the last element of a row. Dereferencing this iterator is undefined behavior
+		/// @param[in] i The row which end iterator will be given. Must be [0;denseRowCount]
+		/// @returns Iterator one past the last element of the i-th row. Dereferencing this is undefined behavior
+		ConstRowIterator crowEnd(const int i) const noexcept;
 
 		/// @brief Perform matrix vector multiplication out = A * mult
 		/// Where A is the current CSR matrix
@@ -1013,6 +1131,20 @@ namespace SMM {
 		}
 	};
 
+	static_assert(std::is_convertible_v<CSRMatrix::ConstIterator, CSRMatrix::ConstIterator>);
+	static_assert(std::is_convertible_v<CSRMatrix::Iterator, CSRMatrix::ConstIterator>);
+	static_assert(! std::is_convertible_v<CSRMatrix::ConstIterator, CSRMatrix::Iterator>);
+	static_assert(std::is_convertible_v<CSRMatrix::Iterator, CSRMatrix::Iterator>);
+	static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::ConstIterator>);
+	static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::Iterator>);
+
+	static_assert(std::is_convertible_v<CSRMatrix::ConstRowIterator, CSRMatrix::ConstRowIterator>);
+	static_assert(std::is_convertible_v<CSRMatrix::RowIterator, CSRMatrix::ConstRowIterator>);
+	static_assert(! std::is_convertible_v<CSRMatrix::ConstRowIterator, CSRMatrix::RowIterator>);
+	static_assert(std::is_convertible_v<CSRMatrix::RowIterator, CSRMatrix::RowIterator>);
+	static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::ConstRowIterator>);
+	static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::RowIterator>);
+
 	inline CSRMatrix::CSRMatrix() noexcept :
 		values(nullptr),
 		positions(nullptr),
@@ -1088,23 +1220,61 @@ namespace SMM {
 		return true;
 	}
 
+	inline CSRMatrix::Iterator CSRMatrix::begin() noexcept {
+		return Iterator(this, firstActiveStart, 0);
+	}
+	
 	inline CSRMatrix::ConstIterator CSRMatrix::begin() const noexcept {
-		return ConstIterator(values.get(), positions.get(), start.get(), firstActiveStart, 0, getDenseRowCount());
+		return ConstIterator(this, firstActiveStart, 0);
+	}
+
+	inline CSRMatrix::ConstIterator CSRMatrix::cbegin() const noexcept {
+		return ConstIterator(this, firstActiveStart, 0);
+	}
+
+	inline CSRMatrix::Iterator CSRMatrix::end() noexcept {
+		return Iterator(this, denseRowCount, start[denseRowCount]);
 	}
 
 	inline CSRMatrix::ConstIterator CSRMatrix::end() const noexcept {
-		return ConstIterator(values.get(), positions.get(), start.get(), denseRowCount, start[denseRowCount], getDenseRowCount());
+		return ConstIterator(this, denseRowCount, start[denseRowCount]);
+	}
+
+	inline CSRMatrix::ConstIterator CSRMatrix::cend() const noexcept {
+		return ConstIterator(this, denseRowCount, start[denseRowCount]);
+	}
+
+	inline CSRMatrix::RowIterator CSRMatrix::rowBegin(const int i) noexcept {
+		assert(i < denseRowCount);
+		return RowIterator(this, i, start[i]);
 	}
 
 	inline CSRMatrix::ConstRowIterator CSRMatrix::rowBegin(const int i) const noexcept {
 		assert(i < denseRowCount);
-		return ConstRowIterator(values.get(), positions.get(), start.get(), i, start[i]);
+		return ConstRowIterator(this, i, start[i]);
+	}
+
+	inline CSRMatrix::ConstRowIterator CSRMatrix::crowBegin(const int i) const noexcept {
+		assert(i < denseRowCount);
+		return ConstRowIterator(this, i, start[i]);
+	}
+
+	inline CSRMatrix::RowIterator CSRMatrix::rowEnd(const int i) noexcept {
+		assert(i < denseRowCount);
+		if(start[i] == start[i+1]) return rowBegin(i);
+		return RowIterator(this, i + 1, start[i + 1]);
 	}
 
 	inline CSRMatrix::ConstRowIterator CSRMatrix::rowEnd(const int i) const noexcept {
 		assert(i < denseRowCount);
 		if(start[i] == start[i+1]) return rowBegin(i);
-		return ConstRowIterator(values.get(), positions.get(), start.get(), i + 1, start[i + 1]);
+		return ConstRowIterator(this, i + 1, start[i + 1]);
+	}
+
+	inline CSRMatrix::ConstRowIterator CSRMatrix::crowEnd(const int i) const noexcept {
+		assert(i < denseRowCount);
+		if(start[i] == start[i+1]) return rowBegin(i);
+		return ConstRowIterator(this, i + 1, start[i + 1]);
 	}
 
 	template<typename FunctorType>
@@ -1315,7 +1485,8 @@ namespace SMM {
 		if(index == -1) {
 			return 0;
 		}
-		values[index] += 0;
+		values[index] += value;
+		return 1;
 	}
 
 	inline const int CSRMatrix::fillArrays(const TripletMatrix& triplet) noexcept {
