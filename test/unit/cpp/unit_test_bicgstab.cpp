@@ -28,8 +28,8 @@ TEST_F(BiCGStab, SmallDenseMatrix) {
 	}
 
 	SMM::CSRMatrix csr(triplet);
-	SMM::Vector b({1,2,3,4});
-	SMM::Vector x(4, 0);
+	SMM::Vector<SMM::real> b({1,2,3,4});
+	SMM::Vector<SMM::real> x(4, 0);
 
 	EXPECT_EQ(solve(csr, b, x, -1, L2Epsilon()), SMM::SolverStatus::SUCCESS);
 	SMM::real resRef[4] = { -5.57856, -5.62417, 6.40556, 11.9399 };

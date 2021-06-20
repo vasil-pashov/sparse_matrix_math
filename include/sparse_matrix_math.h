@@ -25,6 +25,167 @@
 #define SMM_PATCH_VERSION 0
 
 namespace SMM {
+	template<typename T>
+	class Vector {
+	public:
+		Vector() noexcept :
+			size(0),
+			data(nullptr)
+		{ }
+
+		explicit Vector(const int size) noexcept :
+			size(size),
+			data(static_cast<T*>(malloc(size * sizeof(T))))
+		{ }
+
+		Vector(const int size, const T val) noexcept :
+			size(size)
+		{
+			initDataWithVal(val);
+		}
+
+		Vector(const std::initializer_list<T>& l) :
+			size(l.size()),
+			data(static_cast<T*>(malloc(l.size() * sizeof(T))))
+		{
+			std::copy(l.begin(), l.end(), data);
+		}
+
+		Vector(Vector<T>&& other) noexcept :
+			size(other.size) {
+			free(data);
+			data = other.data;
+			other.data = nullptr;
+			other.size = 0;
+		}
+
+		Vector<T>& operator=(Vector<T>&& other) noexcept {
+			size = other.size;
+			free(data);
+			data = other.data;
+			other.data = nullptr;
+			other.size = 0;
+			return *this;
+		}
+
+		Vector(const Vector<T>&) = delete;
+		Vector<T>& operator=(const Vector<T>&) = delete;
+
+		~Vector() {
+			free(data);
+			data = nullptr;
+			size = 0;
+		}
+
+		void init(const int size) {
+			if(this->size != size) {
+				free(data);
+				this->size = size;
+				data = static_cast<T*>(malloc(size * sizeof(T)));
+			}
+		}
+
+		void init(const int size, const T val) {
+			if(this->size != size) {
+				this->size = size;
+				free(data);
+				initDataWithVal(val);
+			} else {
+				fill(val);
+			}
+		}
+
+		const int getSize() const {
+			return this->size;
+		}
+
+		operator T* const() {
+			return data;
+		}
+
+		T operator[](const int index) const {
+			assert(index < size);
+			return data[index];
+		}
+
+		T& operator[](const int index) {
+			assert(index < size);
+			return data[index];
+		}
+
+		Vector<T>& operator+=(const Vector<T>& other) {
+			assert(other.size == size);
+			for (int i = 0; i < size; ++i) {
+				data[i] += other[i];
+			}
+			return *this;
+		}
+
+		Vector<T>& operator-=(const Vector<T>& other) {
+			assert(other.size == size);
+			for (int i = 0; i < size; ++i) {
+				data[i] -= other[i];
+			}
+			return *this;
+		}
+
+		const T secondNorm() const {
+			T sum = 0.0f;
+			for (int i = 0; i < size; ++i) {
+				sum += data[i] * data[i];
+			}
+			return std::sqrt(sum);
+		}
+
+		const T secondNormSquared() const {
+			T sum(0);
+			for (int i = 0; i < size; ++i) {
+				sum += data[i] * data[i];
+			}
+			return sum;
+		}
+
+		const T operator*(const Vector<T>& other) const {
+			assert(other.size == size);
+			T dot(0);
+			for (int i = 0; i < size; ++i) {
+				dot += other[i] * data[i];
+			}
+			return dot;
+		}
+
+		T* const begin() noexcept {
+			return data;
+		}
+
+		T* const end() noexcept {
+			return data + size;
+		}
+
+		void fill(const T value) {
+			if(value == 0.0f) {
+				memset(data, 0, sizeof(T) * size);
+			} else {
+				std::fill_n(data, size, value);
+			}
+		}
+
+	private:
+		void initDataWithVal(const T val) {
+			if (val == 0.0f) {
+				data = static_cast<T*>(calloc(size, sizeof(T)));
+			} else {
+				const int64_t byteSize = int64_t(size) * sizeof(T);
+				data = static_cast<T*>(malloc(byteSize));
+				if (!data) return;
+				for (int i = 0; i < this->size; ++i) {
+					data[i] = val;
+				}
+			}
+		}
+		T* data;
+		int size;
+	};
 
 #ifdef SMM_DEBUG_DOUBLE
 	using real = double;
@@ -42,168 +203,6 @@ namespace SMM {
 			#endif
 		}
 	}
-
-	class Vector {
-	public:
-		Vector() noexcept :
-			size(0),
-			data(nullptr)
-		{ }
-
-		explicit Vector(const int size) noexcept :
-			size(size),
-			data(static_cast<real*>(malloc(size * sizeof(real))))
-		{ }
-
-		Vector(const int size, const real val) noexcept :
-			size(size)
-		{
-			initDataWithVal(val);
-		}
-
-		Vector(const std::initializer_list<real>& l) :
-			size(l.size()),
-			data(static_cast<real*>(malloc(l.size() * sizeof(real))))
-		{
-			std::copy(l.begin(), l.end(), data);
-		}
-
-		Vector(Vector&& other) noexcept :
-			size(other.size) {
-			free(data);
-			data = other.data;
-			other.data = nullptr;
-			other.size = 0;
-		}
-
-		Vector& operator=(Vector&& other) noexcept {
-			size = other.size;
-			free(data);
-			data = other.data;
-			other.data = nullptr;
-			other.size = 0;
-			return *this;
-		}
-
-		Vector(const Vector&) = delete;
-		Vector& operator=(const Vector&) = delete;
-
-		~Vector() {
-			free(data);
-			data = nullptr;
-			size = 0;
-		}
-
-		void init(const int size) {
-			if(this->size != size) {
-				free(data);
-				this->size = size;
-				data = static_cast<real*>(malloc(size * sizeof(real)));
-			}
-		}
-
-		void init(const int size, const real val) {
-			if(this->size != size) {
-				this->size = size;
-				free(data);
-				initDataWithVal(val);
-			} else {
-				fill(val);
-			}
-		}
-
-		const int getSize() const {
-			return this->size;
-		}
-
-		operator real* const() {
-			return data;
-		}
-
-		const real operator[](const int index) const {
-			assert(index < size);
-			return data[index];
-		}
-
-		real& operator[](const int index) {
-			assert(index < size);
-			return data[index];
-		}
-
-		Vector& operator+=(const Vector& other) {
-			assert(other.size == size);
-			for (int i = 0; i < size; ++i) {
-				data[i] += other[i];
-			}
-			return *this;
-		}
-
-		Vector& operator-=(const Vector& other) {
-			assert(other.size == size);
-			for (int i = 0; i < size; ++i) {
-				data[i] -= other[i];
-			}
-			return *this;
-		}
-
-		const real secondNorm() const {
-			real sum = 0.0f;
-			for (int i = 0; i < size; ++i) {
-				sum += data[i] * data[i];
-			}
-			return std::sqrt(sum);
-		}
-
-		const real secondNormSquared() const {
-			real sum(0);
-			for (int i = 0; i < size; ++i) {
-				sum += data[i] * data[i];
-			}
-			return sum;
-		}
-
-		const real operator*(const Vector& other) const {
-			assert(other.size == size);
-			real dot(0);
-			for (int i = 0; i < size; ++i) {
-				dot += other[i] * data[i];
-			}
-			return dot;
-		}
-
-		real* const begin() noexcept {
-			return data;
-		}
-
-		real* const end() noexcept {
-			return data + size;
-		}
-
-		void fill(const real value) {
-			if(value == 0.0f) {
-				memset(data, 0, sizeof(real) * size);
-			} else {
-				std::fill_n(data, size, value);
-			}
-		}
-
-	private:
-		void initDataWithVal(const real val) {
-			if (val == 0.0f) {
-				data = static_cast<real*>(calloc(size, sizeof(real)));
-			} else {
-				const int64_t byteSize = int64_t(size) * sizeof(real);
-				data = static_cast<real*>(malloc(byteSize));
-				if (!data) return;
-				for (int i = 0; i < this->size; ++i) {
-					data[i] = val;
-				}
-			}
-		}
-		real* data;
-		int size;
-	};
-
 
 	template<typename Container>
 	class TripletEl {
@@ -1628,7 +1627,7 @@ namespace SMM {
 		std::vector<int> columnIndex(cols, -1);
 		// TODO [Move Diagonal To End]: This can be avoided if the diagonal elements are kept in a fixed position in each row
 		// For example keep the diagonal element in the end of the row.
-		Vector diagonalElementsInv(rows);
+		Vector<real> diagonalElementsInv(rows);
 		diagonalElementsInv[0] = real(1) / m.values[0];
 		// The algorithm assumes that the columns in each row are sorted in increasing order
 		// U will have explicit main diagonal, L will have implicit main diagonal filled with 1
@@ -1905,15 +1904,15 @@ namespace SMM {
 			maxIterations = a.getDenseRowCount();
 		}
 
-		Vector r(a.getDenseRowCount());
+		Vector<real> r(a.getDenseRowCount());
 		a.rMultSub(b, x, r);
 
-		Vector p(a.getDenseRowCount());
+		Vector<real> p(a.getDenseRowCount());
 		for (int i = 0; i < p.getSize(); ++i) {
 			p[i] = r[i];
 		}
 
-		Vector ap(a.getDenseRowCount());
+		Vector<real> ap(a.getDenseRowCount());
 
 		real rSquare = r * r;
 		int iterations = 0;
@@ -1985,13 +1984,13 @@ namespace SMM {
 		}
 
 		const int rows = a.getDenseRowCount();
-		Vector r(rows), r0(rows);
+		Vector<real> r(rows), r0(rows);
 		a.rMultSub(b, x, r);
 		
 		// Help vectors, as in Saad's book, the vectors in the polynomial reccursion are: q, p, r
 		// They can be expressed only in terms of themselves, the other vectors do same some computation
 		// of the use a lot of memory they can be removed.
-		Vector p(rows), u(rows), q(rows), alphaUQ(rows), ap(rows);
+		Vector<real> p(rows), u(rows), q(rows), alphaUQ(rows), ap(rows);
 		for(int i = 0; i < rows; ++i) {
 			p[i] = r[i];
 			u[i] = r[i];
@@ -2060,13 +2059,13 @@ namespace SMM {
 		const int rows = a.getDenseRowCount();
 		// This vector is allocated only if there is some preconditioner different than the identity
 		// It is used to store intermediate data needed by the preconditioner
-		Vector precondScratchpad;
+		Vector<real> precondScratchpad;
 		constexpr bool precondition = !std::is_same<Preconditioner, decltype(a.getPreconditioner<SolverPreconditioner::NONE>())>::value;
 		if constexpr(precondition) {
 			precondScratchpad.init(rows);
 		}
 
-		Vector r(rows), r0(rows), p(rows), ap(rows), s(rows), as(rows);
+		Vector<real> r(rows), r0(rows), p(rows), ap(rows), s(rows), as(rows);
 		a.rMultSub(b, x, r);
 
 		if constexpr(precondition) {
@@ -2189,7 +2188,7 @@ namespace SMM {
 		Vector r(rows, real(0));
 		a.rMultSub(b, x0, r);
 
-		Vector p(rows), Ap(rows, real(0));
+		Vector<real> p(rows), Ap(rows, real(0));
 		real residualNormSquared = 0;
 		for(int i = 0; i < rows; ++i) {
 			p[i] = r[i];
@@ -2271,9 +2270,9 @@ namespace SMM {
 		// 10.	p_{j+1} = z_{j+1} + beta_j * p_j
 		const int rows = a.getDenseRowCount();
 		const real epsSuared = eps * eps;
-		Vector r(rows, 0);
-		Vector z(rows, 0);
-		Vector p(rows, 0);
+		Vector<real> r(rows, 0);
+		Vector<real> z(rows, 0);
+		Vector<real> p(rows, 0);
 		a.rMultSub(b, x0, r);
 		M.apply(r, z);
 		real rz = 0;
@@ -2289,7 +2288,7 @@ namespace SMM {
 		if(maxIterations == -1) {
 			maxIterations = rows;
 		}
-		Vector Ap(rows, 0);
+		Vector<real> Ap(rows, 0);
 		// We have initial condition different than the output vector on the first iteration when we compute
 		// x = x + alpha * p, we must have the x on the right hand side to be the initial condition x. And on all
 		// next iterations it must be the output vector.
