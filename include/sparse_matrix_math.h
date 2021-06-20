@@ -94,7 +94,7 @@ namespace SMM {
 		const int getSize() const;
 
 		/// Cast the vector to a pointer of the underlying type
-		operator T* const();
+		operator T*();
 
 		/// Returns a const reference to the element at specified location pos. No bounds checking is performed.
 		/// @param[in] index Position of the element to return
@@ -244,7 +244,7 @@ namespace SMM {
 	}
 
 	template<typename T>
-	Vector<T>::operator T* const() {
+	Vector<T>::operator T*() {
 		return data;
 	}
 

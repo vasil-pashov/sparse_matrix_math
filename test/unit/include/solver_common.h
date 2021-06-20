@@ -3,11 +3,12 @@
 //**************************************************************************
 #pragma once
 #include "sparse_matrix_math.h"
+template<typename T>
 class SolverTest : public ::testing::Test {
 protected:
-	virtual SMM::SolverStatus solve(const SMM::CSRMatrix& a, SMM::real* b, SMM::real* x, int maxIterations, SMM::real eps)  = 0;
+	virtual SMM::SolverStatus solve(const SMM::CSRMatrix& a, T* b, T* x, int maxIterations, T eps)  = 0;
 	void SumRowTest(const char* path) {
-		SMM::TripletMatrix triplet;
+		SMM::TripletMatrix<T> triplet;
 		const SMM::MatrixLoadStatus status = SMM::loadMatrix(path, triplet);
 		ASSERT_EQ(status, SMM::MatrixLoadStatus::SUCCESS);
 		SMM::Vector rhs(triplet.getDenseRowCount(), 0.0f);

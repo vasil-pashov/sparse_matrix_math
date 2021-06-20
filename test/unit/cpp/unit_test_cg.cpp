@@ -2,25 +2,29 @@
 #include "test_common.h"
 #include "solver_common.h"
 
-class CG : public SolverTest {
-	SMM::SolverStatus solve(const SMM::CSRMatrix& a, SMM::real* b, SMM::real* x, int maxIterations, SMM::real eps) override {
+template<typename T>
+class CG : public SolverTest<T> {
+	SMM::SolverStatus solve(const SMM::CSRMatrix& a, T* b, T* x, int maxIterations, T eps) override {
 		return SMM::ConjugateGradient(a, b, x, x, maxIterations, eps);
 	}
 };
 
-TEST_F(CG, mesh1e1_structural_48_48_177) {
+using MyTypes = ::testing::Types<SMM::real>;
+TYPED_TEST_SUITE(CG, MyTypes);
+
+TYPED_TEST(CG, mesh1e1_structural_48_48_177) {
 	const std::string path = ASSET_PATH + std::string("mesh1e1_structural_48_48_177.mtx");
-	SumRowTest(path.c_str());
+	this->SumRowTest(path.c_str());
 }
 
-TEST_F(CG, mesh1em1_structural_48_48_177) {
+TYPED_TEST(CG, mesh1em1_structural_48_48_177) {
 	const std::string path = ASSET_PATH + std::string("mesh1em1_structural_48_48_177.mtx");
-	SumRowTest(path.c_str());
+	this->SumRowTest(path.c_str());
 }
 
-TEST_F(CG, mesh1em6_structural_48_48_177) {
+TYPED_TEST(CG, mesh1em6_structural_48_48_177) {
 	const std::string path = ASSET_PATH + std::string("mesh1em6_structural_48_48_177.mtx");
-	SumRowTest(path.c_str());
+	this->SumRowTest(path.c_str());
 }
 
 TEST(IC0, TestApplyIC0) {
@@ -33,7 +37,7 @@ TEST(IC0, TestApplyIC0) {
     	{0 , 5, 0 , 7 , 8}
 	};
 
-	SMM::TripletMatrix triplet(size, size);
+	SMM::TripletMatrix<SMM::real> triplet(size, size);
 	for(int i = 0; i < size; ++i) {
 		for(int j = 0; j < size; ++j) {
 			if(denseRef[i][j] != 0) {
@@ -56,8 +60,12 @@ TEST(IC0, TestApplyIC0) {
 	}
 }
 
-class PCG : public SolverTest {
-	SMM::SolverStatus solve(const SMM::CSRMatrix& a, SMM::real* b, SMM::real* x, int maxIterations, SMM::real eps) override {
+using MyTypes = ::testing::Types<SMM::real>;
+TYPED_TEST_SUITE(PCG, MyTypes);
+
+template<typename T>
+class PCG : public SolverTest<T> {
+	SMM::SolverStatus solve(const SMM::CSRMatrix& a, T* b, T* x, int maxIterations, T eps) override {
 		SMM::CSRMatrix::IC0Preconditioner M(a);
 		const int error = M.init();
 		EXPECT_EQ(error, 0);
@@ -65,17 +73,17 @@ class PCG : public SolverTest {
 	}
 };
 
-TEST_F(PCG, mesh1e1_structural_48_48_177) {
+TYPED_TEST(PCG, mesh1e1_structural_48_48_177) {
 	const std::string path = ASSET_PATH + std::string("mesh1e1_structural_48_48_177.mtx");
-	SumRowTest(path.c_str());
+	this->SumRowTest(path.c_str());
 }
 
-TEST_F(PCG, mesh1em1_structural_48_48_177) {
+TYPED_TEST(PCG, mesh1em1_structural_48_48_177) {
 	const std::string path = ASSET_PATH + std::string("mesh1em1_structural_48_48_177.mtx");
-	SumRowTest(path.c_str());
+	this->SumRowTest(path.c_str());
 }
 
-TEST_F(PCG, mesh1em6_structural_48_48_177) {
+TYPED_TEST(PCG, mesh1em6_structural_48_48_177) {
 	const std::string path = ASSET_PATH + std::string("mesh1em6_structural_48_48_177.mtx");
-	SumRowTest(path.c_str());
+	this->SumRowTest(path.c_str());
 }

@@ -34,28 +34,35 @@ namespace SMM {
 	}
 }
 
-TEST(TripletMatrixTest, ConstructorRowCol) {
+template <typename T>
+class TripletMatrixTest : public testing::Test {};
+
+using MyTypes = ::testing::Types<SMM::real>;
+TYPED_TEST_SUITE(TripletMatrixTest, MyTypes);
+
+
+TYPED_TEST(TripletMatrixTest, ConstructorRowCol) {
 	const int numRows = 5;
 	const int numCols = 10;
-	SMM::TripletMatrix m(numRows, numCols);
+	SMM::TripletMatrix<TypeParam> m(numRows, numCols);
 	EXPECT_EQ(m.getDenseRowCount(), numRows);
 	EXPECT_EQ(m.getDenseColCount(), numCols);
 	EXPECT_EQ(m.getNonZeroCount(), 0);
 }
 
-TEST(TripletMatrixTest, ConstructorAlloc) {
+TYPED_TEST(TripletMatrixTest, ConstructorAlloc) {
 	const int numRows = 5;
 	const int numCols = 10;
 	const int numElements = 5;
-	SMM::TripletMatrix m(numRows, numCols, numElements);
+	SMM::TripletMatrix<TypeParam> m(numRows, numCols, numElements);
 	EXPECT_EQ(m.getDenseRowCount(), numRows);
 	EXPECT_EQ(m.getDenseColCount(), numCols);
 	EXPECT_EQ(m.getNonZeroCount(), 0);
 }
-TEST(TripletMatrixTest, AddElementsCount) {
+TYPED_TEST(TripletMatrixTest, AddElementsCount) {
 	const int numRows = 10;
 	const int numCols = 12;
-	SMM::TripletMatrix m(numRows, numCols);
+	SMM::TripletMatrix<TypeParam> m(numRows, numCols);
 	EXPECT_EQ(m.getNonZeroCount(), 0);
 
 	m.addEntry(1, 1, 1.0f);
@@ -72,11 +79,11 @@ TEST(TripletMatrixTest, AddElementsCount) {
 }
 
 
-TEST(TripletMatrixTest, AddElementsAllocPreCount) {
+TYPED_TEST(TripletMatrixTest, AddElementsAllocPreCount) {
 	const int numRows = 10;
 	const int numCols = 12;
 	const int numElements = 2;
-	SMM::TripletMatrix m(numRows, numCols, numElements);
+	SMM::TripletMatrix<TypeParam> m(numRows, numCols, numElements);
 	EXPECT_EQ(m.getNonZeroCount(), 0);
 
 	m.addEntry(1, 1, 1.0f);
@@ -92,11 +99,11 @@ TEST(TripletMatrixTest, AddElementsAllocPreCount) {
 	EXPECT_EQ(m.getNonZeroCount(), 3);
 }
 
-TEST(TripletMatrixTest, ToLinearDenseRowMajor) {
+TYPED_TEST(TripletMatrixTest, ToLinearDenseRowMajor) {
 	const int numRows = 4;
 	const int numCols = 4;
 	const int numElements = 10;
-	SMM::TripletMatrix m(numRows, numCols, numElements);
+	SMM::TripletMatrix<TypeParam> m(numRows, numCols, numElements);
 	const int denseSize = numRows * numCols;
 	const SMM::real denseRef[denseSize] = {
 		4.5f, 0.0f, 3.2f, 0.0f,
@@ -126,11 +133,11 @@ TEST(TripletMatrixTest, ToLinearDenseRowMajor) {
 	}
 }
 
-TEST(TripletMatrixTest, DirectAccessors) {
+TYPED_TEST(TripletMatrixTest, DirectAccessors) {
 	const int numRows = 4;
 	const int numCols = 4;
 	const int numElements = 10;
-	SMM::TripletMatrix m(numRows, numCols, numElements);
+	SMM::TripletMatrix<TypeParam> m(numRows, numCols, numElements);
 	const int denseSize = numRows * numCols;
 	SMM::real denseRef[denseSize] = {
 		4.5f, 0.0f, 3.2f, 0.0f,
@@ -180,11 +187,16 @@ TEST(TripletMatrixTest, DirectAccessors) {
 // ==================== COMPRESSED SPARSE MATRIX COMMON =====================
 // ==========================================================================
 
-TEST(CSRMatrix, DirectAccessors) {
+template <typename T>
+class CSRMatrixTest : public testing::Test {};
+
+TYPED_TEST_SUITE(CSRMatrixTest, MyTypes);
+
+TYPED_TEST(CSRMatrixTest, DirectAccessors) {
 	const int numRows = 4;
 	const int numCols = 4;
 	const int numElements = 10;
-	SMM::TripletMatrix triplet(numRows, numCols, numElements);
+	SMM::TripletMatrix<TypeParam> triplet(numRows, numCols, numElements);
 	const int denseSize = numRows * numCols;
 	SMM::real denseRef[denseSize] = {
 		4.5f, 0.0f, 3.2f, 0.0f,
@@ -233,10 +245,10 @@ TEST(CSRMatrix, DirectAccessors) {
 	}
 }
 
-TEST(CSRMatrix, RowIterators) {
+TYPED_TEST(CSRMatrixTest, RowIterators) {
 	const int numRows = 9;
 	const int numCols = 4;
-	SMM::TripletMatrix triplet(numRows, numCols);
+	SMM::TripletMatrix<TypeParam> triplet(numRows, numCols);
 	const int denseSize = numRows * numCols;
 	const SMM::real denseRef[numRows][numCols] = {
 		{0.0f, 0.0f, 0.0f, 0.0f},
@@ -298,14 +310,13 @@ class CSMatrixCtorTest : public testing::Test {
 
 };
 
-using CSMatrixTypes = ::testing::Types<SMM::CSRMatrix>;
-TYPED_TEST_SUITE(CSMatrixCtorTest, CSMatrixTypes);
+TYPED_TEST_SUITE(CSMatrixCtorTest, MyTypes);
 
 TYPED_TEST(CSMatrixCtorTest, ConstrcutFromEmptyTriplet) {
 	const int numRows = 4;
 	const int numCols = 5;
-	SMM::TripletMatrix triplet(numRows, numCols);
-	TypeParam m(triplet);
+	SMM::TripletMatrix<TypeParam> triplet(numRows, numCols);
+	SMM::CSRMatrix m(triplet);
 	EXPECT_EQ(m.getDenseRowCount(), triplet.getDenseRowCount());
 	EXPECT_EQ(m.getDenseColCount(), triplet.getDenseColCount());
 	EXPECT_EQ(m.getNonZeroCount(), triplet.getNonZeroCount());
@@ -315,7 +326,7 @@ TYPED_TEST(CSMatrixCtorTest, ConstructFromTriplet) {
 	const int numRows = 10;
 	const int numCols = 12;
 	const int numElements = 2;
-	SMM::TripletMatrix triplet(numRows, numCols, numElements);
+	SMM::TripletMatrix<TypeParam> triplet(numRows, numCols, numElements);
 	EXPECT_EQ(triplet.getNonZeroCount(), 0);
 
 	triplet.addEntry(1, 1, 1.0f);
@@ -332,13 +343,13 @@ TYPED_TEST(CSMatrixCtorTest, ConstructFromTriplet) {
 template<typename CSMatrix_t>
 using CSMatrixToLinearRowMajor = CSMatrixCtorTest<CSMatrix_t>;
 
-TYPED_TEST_SUITE(CSMatrixToLinearRowMajor, CSMatrixTypes);
+TYPED_TEST_SUITE(CSMatrixToLinearRowMajor, MyTypes);
 
 TYPED_TEST(CSMatrixToLinearRowMajor, ToLinearDenseRowMajor) {
 	const int numRows = 4;
 	const int numCols = 4;
 	const int numElements = 10;
-	SMM::TripletMatrix triplet(numRows, numCols, numElements);
+	SMM::TripletMatrix<TypeParam> triplet(numRows, numCols, numElements);
 	const int denseSize = numRows * numCols;
 	const SMM::real denseRef[denseSize] = {
 		4.5f, 0.0f, 3.2f, 0.0f,
@@ -367,44 +378,43 @@ TYPED_TEST(CSMatrixToLinearRowMajor, ToLinearDenseRowMajor) {
 	}
 }
 
-template <typename CSMatrix_t>
+template <typename T>
 class CSMatrixRMultOp : public testing::Test {
 protected:
 	static const int numRows = 5;
 	static const int numCols = 4;
 	static const int numElements = 10;
-	SMM::TripletMatrix triplet;
+	SMM::TripletMatrix<T> triplet;
 
 	CSMatrixRMultOp() : triplet(numRows, numCols, numElements)
 	{
-		triplet.addEntry(0, 0, 4.5f);
-		triplet.addEntry(0, 2, 3.2f);
-		triplet.addEntry(1, 0, 3.1f);
-		triplet.addEntry(1, 1, 2.9f);
-		triplet.addEntry(1, 3, 0.9f);
-		triplet.addEntry(2, 1, 1.7f);
-		triplet.addEntry(2, 2, 3.0f);
-		triplet.addEntry(3, 0, 3.5f);
-		triplet.addEntry(3, 1, 0.4f);
-		triplet.addEntry(3, 3, 1.0f);
+		triplet.addEntry(0, 0, 4.5);
+		triplet.addEntry(0, 2, 3.2);
+		triplet.addEntry(1, 0, 3.1);
+		triplet.addEntry(1, 1, 2.9);
+		triplet.addEntry(1, 3, 0.9);
+		triplet.addEntry(2, 1, 1.7);
+		triplet.addEntry(2, 2, 3.0);
+		triplet.addEntry(3, 0, 3.5);
+		triplet.addEntry(3, 1, 0.4);
+		triplet.addEntry(3, 3, 1.0);
 		m.init(triplet);
 	}
 	
 	SMM::CSRMatrix m;
 };
 
-template<typename CSMatrix_t>
-using CSMatrixRMultAdd = CSMatrixRMultOp<CSMatrix_t>;
-
-TYPED_TEST_SUITE(CSMatrixRMultAdd, CSMatrixTypes);
+template<typename T>
+using CSMatrixRMultAdd = CSMatrixRMultOp<T>;
+TYPED_TEST_SUITE(CSMatrixRMultAdd, MyTypes);
 
 TYPED_TEST(CSMatrixRMultAdd, EmptyMatrix) {
 	const int numRows = CSMatrixRMultOp<TypeParam>::numRows;
-	SMM::real mult[numRows] = { 1,2,3,4 };
-	SMM::real add[numRows] = { 5,6,7,8 };
+	TypeParam mult[numRows] = { 1,2,3,4 };
+	TypeParam add[numRows] = { 5,6,7,8 };
 	const SMM::real resRef[numRows] = { 5,6,7,8 };
-	SMM::TripletMatrix emptyTriplet(4, 4, 10);
-	TypeParam emptyMatrix(emptyTriplet);
+	SMM::TripletMatrix<TypeParam> emptyTriplet(4, 4, 10);
+	SMM::CSRMatrix emptyMatrix(emptyTriplet);
 	emptyMatrix.rMultAdd(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
@@ -413,9 +423,9 @@ TYPED_TEST(CSMatrixRMultAdd, EmptyMatrix) {
 
 TYPED_TEST(CSMatrixRMultAdd, AddMultZero) {
 	const int numRows = CSMatrixRMultOp<TypeParam>::numRows;
-	SMM::real mult[numRows] = {};
-	SMM::real add[numRows] = {};
-	const SMM::real resRef[numRows] = {};
+	TypeParam mult[numRows] = {};
+	TypeParam add[numRows] = {};
+	const TypeParam resRef[numRows] = {};
 	CSMatrixRMultOp<TypeParam>::m.rMultAdd(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
@@ -424,9 +434,9 @@ TYPED_TEST(CSMatrixRMultAdd, AddMultZero) {
 
 TYPED_TEST(CSMatrixRMultAdd, AddZero) {
 	const int numRows = CSMatrixRMultOp<TypeParam>::numRows;
-	SMM::real mult[numRows] = { 1,2,3,4 };
-	SMM::real add[numRows] = {};
-	const SMM::real resRef[numRows] = { 14.1, 12.5, 12.4, 8.3};
+	TypeParam mult[numRows] = { 1,2,3,4 };
+	TypeParam add[numRows] = {};
+	const TypeParam resRef[numRows] = { 14.1, 12.5, 12.4, 8.3};
 	CSMatrixRMultOp<TypeParam>::m.rMultAdd(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
@@ -435,9 +445,9 @@ TYPED_TEST(CSMatrixRMultAdd, AddZero) {
 
 TYPED_TEST(CSMatrixRMultAdd, MultZero) {
 	const int numRows = CSMatrixRMultOp<TypeParam>::numRows;
-	SMM::real mult[numRows] = {};
-	SMM::real add[numRows] = { 5,6,7,8 };
-	const SMM::real resRef[numRows] = { 5,6,7,8 };
+	TypeParam mult[numRows] = {};
+	TypeParam add[numRows] = { 5,6,7,8 };
+	const TypeParam resRef[numRows] = { 5,6,7,8 };
 	CSMatrixRMultOp<TypeParam>::m.rMultAdd(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
@@ -446,9 +456,9 @@ TYPED_TEST(CSMatrixRMultAdd, MultZero) {
 
 TYPED_TEST(CSMatrixRMultAdd, Basic) {
 	const int numRows = CSMatrixRMultOp<TypeParam>::numRows;
-	SMM::real mult[numRows] = { 1,0,3,4 };
-	SMM::real add[numRows] = { 5,6,7,8,10 };
-	const SMM::real resRef[numRows] = { 19.1, 12.7, 16., 15.5, 10 };
+	TypeParam mult[numRows] = { 1,0,3,4 };
+	TypeParam add[numRows] = { 5,6,7,8,10 };
+	const TypeParam resRef[numRows] = { 19.1, 12.7, 16., 15.5, 10 };
 	CSMatrixRMultOp<TypeParam>::m.rMultAdd(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
@@ -456,18 +466,18 @@ TYPED_TEST(CSMatrixRMultAdd, Basic) {
 }
 
 
-template<typename CSMatrix_t>
-using CSMatrixRMultSub = CSMatrixRMultOp<CSMatrix_t>;
+template<typename T>
+using CSMatrixRMultSub = CSMatrixRMultOp<T>;
 
-TYPED_TEST_SUITE(CSMatrixRMultSub, CSMatrixTypes);
+TYPED_TEST_SUITE(CSMatrixRMultSub, MyTypes);
 
 TYPED_TEST(CSMatrixRMultSub, EmptyMatrix) {
 	const int numRows = CSMatrixRMultSub<TypeParam>::numRows;
-	SMM::real mult[numRows] = { 1,2,3,4 };
-	SMM::real add[numRows] = { 5,6,7,8 };
+	TypeParam mult[numRows] = { 1,2,3,4 };
+	TypeParam add[numRows] = { 5,6,7,8 };
 	const SMM::real resRef[numRows] = { 5,6,7,8 };
-	SMM::TripletMatrix emptyTriplet(4, 4, 10);
-	TypeParam emptyMatrix(emptyTriplet);
+	SMM::TripletMatrix<TypeParam> emptyTriplet(4, 4, 10);
+	SMM::CSRMatrix emptyMatrix(emptyTriplet);
 	emptyMatrix.rMultSub(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
@@ -476,9 +486,9 @@ TYPED_TEST(CSMatrixRMultSub, EmptyMatrix) {
 
 TYPED_TEST(CSMatrixRMultSub, SubMultZero) {
 	const int numRows = CSMatrixRMultSub<TypeParam>::numRows;
-	SMM::real mult[numRows] = {};
-	SMM::real add[numRows] = {};
-	const SMM::real resRef[numRows] = {};
+	TypeParam mult[numRows] = {};
+	TypeParam add[numRows] = {};
+	const TypeParam resRef[numRows] = {};
 	CSMatrixRMultSub<TypeParam>::m.rMultSub(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
@@ -487,9 +497,9 @@ TYPED_TEST(CSMatrixRMultSub, SubMultZero) {
 
 TYPED_TEST(CSMatrixRMultSub, SubZero) {
 	const int numRows = CSMatrixRMultSub<TypeParam>::numRows;
-	SMM::real mult[numRows] = { 1,2,3,4 };
-	SMM::real add[numRows] = {};
-	const SMM::real resRef[numRows] = { -14.1, -12.5, -12.4, -8.3 };
+	TypeParam mult[numRows] = { 1,2,3,4 };
+	TypeParam add[numRows] = {};
+	const TypeParam resRef[numRows] = { -14.1, -12.5, -12.4, -8.3 };
 	CSMatrixRMultSub<TypeParam>::m.rMultSub(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
@@ -498,9 +508,9 @@ TYPED_TEST(CSMatrixRMultSub, SubZero) {
 
 TYPED_TEST(CSMatrixRMultSub, MultZero) {
 	const int numRows = CSMatrixRMultSub<TypeParam>::numRows;
-	SMM::real mult[numRows] = {};
-	SMM::real add[numRows] = { 5,6,7,8 };
-	const SMM::real resRef[numRows] = { 5,6,7,8 };
+	TypeParam mult[numRows] = {};
+	TypeParam add[numRows] = { 5,6,7,8 };
+	const TypeParam resRef[numRows] = { 5,6,7,8 };
 	CSMatrixRMultSub<TypeParam>::m.rMultSub(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
@@ -509,9 +519,9 @@ TYPED_TEST(CSMatrixRMultSub, MultZero) {
 
 TYPED_TEST(CSMatrixRMultSub, Basic) {
 	const int numRows = CSMatrixRMultSub<TypeParam>::numRows;
-	SMM::real mult[numRows] = { 1,0,3,4 };
-	SMM::real add[numRows] = { 5,6,7,8,10 };
-	const SMM::real resRef[numRows] = { -9.1, -0.7, -2., 0.5, 10 };
+	TypeParam mult[numRows] = { 1,0,3,4 };
+	TypeParam add[numRows] = { 5,6,7,8,10 };
+	const TypeParam resRef[numRows] = { -9.1, -0.7, -2., 0.5, 10 };
 	CSMatrixRMultSub<TypeParam>::m.rMultSub(add, mult, add);
 	for (int i = 0; i < numRows; ++i) {
 		EXPECT_NEAR(resRef[i], add[i], 1e-6);
@@ -522,13 +532,13 @@ TYPED_TEST(CSMatrixRMultSub, Basic) {
 // ===================== COMPRESSED SPARSE ROW MATRIX  ======================
 // ==========================================================================
 
-TEST(CSRMatrixTest, CSRMatrixEmptyConstForwardIterator) {
-	SMM::TripletMatrix triplet(10, 10);
+TYPED_TEST(CSRMatrixTest, CSRMatrixEmptyConstForwardIterator) {
+	SMM::TripletMatrix<TypeParam> triplet(10, 10);
 	SMM::CSRMatrix csr(triplet);
 	EXPECT_TRUE(csr.begin() == csr.end());
 }
 
-TEST(CSRMatrixTest, CSRMatrixConstForwardIterator) {
+TYPED_TEST(CSRMatrixTest, CSRMatrixConstForwardIterator) {
 	const int numRows = 6;
 	const int numCols = 6;
 	SMM::real denseRef[numRows][numCols] = {};
@@ -537,7 +547,7 @@ TEST(CSRMatrixTest, CSRMatrixConstForwardIterator) {
 	denseRef[1][3] = 3.3f;
 	denseRef[4][4] = 4.4f;
 
-	SMM::TripletMatrix triplet(numRows, numCols);
+	SMM::TripletMatrix<TypeParam> triplet(numRows, numCols);
 	triplet.addEntry(4, 4, 4.4f);
 	triplet.addEntry(1, 1, 1.1f);
 	triplet.addEntry(1, 2, 2.2f);
@@ -569,18 +579,22 @@ TEST(CSRMatrixTest, CSRMatrixConstForwardIterator) {
 // ======================= Arithmetic operations ===========================
 // =========================================================================
 
-TEST(CSRArithmetic, MultiplyByScalar) {
+template<typename T>
+class CSRArithmetic : public testing::Test { };
+TYPED_TEST_SUITE(CSRArithmetic, MyTypes);
+
+TYPED_TEST(CSRArithmetic, MultiplyByScalar) {
 	const int numRows = 6;
 	const int numCols = 10;
 
-	SMM::real denseRef[numRows][numCols] = {};
+	TypeParam denseRef[numRows][numCols] = {};
 	denseRef[2][8] = 28.41637;
 	denseRef[2][2] = 31.52779;
 	denseRef[1][7] = -237.59453;
 	denseRef[5][3] = 273.3937;
 	denseRef[0][3] = -471.11824;
 
-	SMM::TripletMatrix triplet(numRows, numCols);
+	SMM::TripletMatrix<TypeParam> triplet(numRows, numCols);
 	for(int i = 0; i < numRows; ++i) {
 		for(int j = 0; j < numCols; ++j) {
 			if(denseRef[i][j] != 0) {
@@ -592,7 +606,7 @@ TEST(CSRArithmetic, MultiplyByScalar) {
 	SMM::CSRMatrix csr;
 	csr.init(triplet);
 
-	const SMM::real scalar = -478.53439;
+	TypeParam scalar = -478.53439;
 
 	csr *= scalar;
 
@@ -602,26 +616,26 @@ TEST(CSRArithmetic, MultiplyByScalar) {
 }
 
 
-TEST(CSRArithmetic, InplaceAdd) {
+TYPED_TEST(CSRArithmetic, InplaceAdd) {
 	const int numRows = 6;
 	const int numCols = 10;
 
-	SMM::real denseRef1[numRows][numCols] = {};
+	TypeParam denseRef1[numRows][numCols] = {};
 	denseRef1[2][8] = 28.41637;
 	denseRef1[2][2] = 31.52779;
 	denseRef1[1][7] = -237.59453;
 	denseRef1[5][3] = 273.3937;
 	denseRef1[0][3] = -471.11824;
 
-	SMM::real denseRef2[numRows][numCols] = {};
+	TypeParam denseRef2[numRows][numCols] = {};
 	denseRef1[2][8] = 558.57004;
 	denseRef1[2][2] = 53.47841;
 	denseRef1[1][7] = 621.94377;
 	denseRef1[5][3] = 237.2853;
 	denseRef1[0][3] = -449.43152;
 
-	SMM::TripletMatrix triplet1(numRows, numCols);
-	SMM::TripletMatrix triplet2(numRows, numCols);
+	SMM::TripletMatrix<TypeParam> triplet1(numRows, numCols);
+	SMM::TripletMatrix<TypeParam> triplet2(numRows, numCols);
 	for(int i = 0; i < numRows; ++i) {
 		for(int j = 0; j < numCols; ++j) {
 			if(denseRef1[i][j] != 0) {
@@ -644,26 +658,26 @@ TEST(CSRArithmetic, InplaceAdd) {
 	}
 }
 
-TEST(CSRArithmetic, InplaceSubtract) {
+TYPED_TEST(CSRArithmetic, InplaceSubtract) {
 	const int numRows = 6;
 	const int numCols = 10;
 
-	SMM::real denseRef1[numRows][numCols] = {};
+	TypeParam denseRef1[numRows][numCols] = {};
 	denseRef1[2][8] = 28.41637;
 	denseRef1[2][2] = 31.52779;
 	denseRef1[1][7] = -237.59453;
 	denseRef1[5][3] = 273.3937;
 	denseRef1[0][3] = -471.11824;
 
-	SMM::real denseRef2[numRows][numCols] = {};
+	TypeParam denseRef2[numRows][numCols] = {};
 	denseRef1[2][8] = 558.57004;
 	denseRef1[2][2] = 53.47841;
 	denseRef1[1][7] = 621.94377;
 	denseRef1[5][3] = 237.2853;
 	denseRef1[0][3] = -449.43152;
 
-	SMM::TripletMatrix triplet1(numRows, numCols);
-	SMM::TripletMatrix triplet2(numRows, numCols);
+	SMM::TripletMatrix<TypeParam> triplet1(numRows, numCols);
+	SMM::TripletMatrix<TypeParam> triplet2(numRows, numCols);
 	for(int i = 0; i < numRows; ++i) {
 		for(int j = 0; j < numCols; ++j) {
 			if(denseRef1[i][j] != 0) {
@@ -690,9 +704,13 @@ TEST(CSRArithmetic, InplaceSubtract) {
 // ============================== FILE LOAD ================================
 // =========================================================================
 
-TEST(LoadFile, LoadMatrixMarket) {
+template<typename T>
+class LoadFile : public testing::Test { };
+TYPED_TEST_SUITE(LoadFile, MyTypes);
+
+TYPED_TEST(LoadFile, LoadMatrixMarket) {
 	const std::string path = ASSET_PATH + std::string("mesh1e1_structural_48_48_177.mtx");
-	SMM::TripletMatrix triplet;
+	SMM::TripletMatrix<TypeParam> triplet;
 	const SMM::MatrixLoadStatus status = SMM::loadMatrix(path.c_str(), triplet);
 	ASSERT_EQ(status, SMM::MatrixLoadStatus::SUCCESS);
 	EXPECT_EQ(triplet.getDenseRowCount(), 48);
@@ -704,7 +722,11 @@ TEST(LoadFile, LoadMatrixMarket) {
 // ============================== FILE SAVE ================================
 // =========================================================================
 
-TEST(SaveDense, CSRSMMDT) {
+template<typename T>
+class SaveDense : public testing::Test { };
+TYPED_TEST_SUITE(SaveDense, MyTypes);
+
+TYPED_TEST(SaveDense, CSRSMMDT) {
 	struct FileRemoveRAII {
 		FileRemoveRAII(const std::string& name) :
 			name(name)
@@ -718,7 +740,7 @@ TEST(SaveDense, CSRSMMDT) {
 	private:
 		std::string name;
 	};
-	SMM::TripletMatrix triplet(10, 10);
+	SMM::TripletMatrix<TypeParam> triplet(10, 10);
 	triplet.addEntry(0, 0, 234.5324);
 	triplet.addEntry(3, 2, 2.4);
 	triplet.addEntry(5, 2, 1);
@@ -731,7 +753,7 @@ TEST(SaveDense, CSRSMMDT) {
 	FileRemoveRAII file(ASSET_PATH + std::string("__test.smmdt"));
 	SMM::saveDenseText(file.getName(), csr);
 
-	SMM::TripletMatrix tripletRead;
+	SMM::TripletMatrix<TypeParam> tripletRead;
 	const SMM::MatrixLoadStatus status = SMM::loadMatrix(file.getName(), tripletRead);
 	ASSERT_EQ(status, SMM::MatrixLoadStatus::SUCCESS);
 	EXPECT_TRUE(NearMatrix(tripletRead, csr, 1e-6));
