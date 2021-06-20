@@ -28,164 +28,324 @@ namespace SMM {
 	template<typename T>
 	class Vector {
 	public:
-		Vector() noexcept :
-			size(0),
-			data(nullptr)
-		{ }
 
-		explicit Vector(const int size) noexcept :
-			size(size),
-			data(static_cast<T*>(malloc(size * sizeof(T))))
-		{ }
+		using Iterator = T*;
+		using ConstIterator = const T*;
 
-		Vector(const int size, const T val) noexcept :
-			size(size)
-		{
-			initDataWithVal(val);
-		}
+		/// Default construct a vector. Sets the size to 0.
+		Vector() noexcept;
 
-		Vector(const std::initializer_list<T>& l) :
-			size(l.size()),
-			data(static_cast<T*>(malloc(l.size() * sizeof(T))))
-		{
-			std::copy(l.begin(), l.end(), data);
-		}
+		/// Construct a vector with a given size. The values will be junk, the user must init them
+		/// @param[in] size The size of the vector.
+		explicit Vector(const int size) noexcept;
 
-		Vector(Vector<T>&& other) noexcept :
-			size(other.size) {
-			free(data);
-			data = other.data;
-			other.data = nullptr;
-			other.size = 0;
-		}
+		/// Construct a vector of given size and set all values to the specified value
+		/// @param[in] size The size of the vector
+		/// @param[in] val The the value which all elements of the vectori will take
+		Vector(const int size, const T val) noexcept;
 
-		Vector<T>& operator=(Vector<T>&& other) noexcept {
-			size = other.size;
-			free(data);
-			data = other.data;
-			other.data = nullptr;
-			other.size = 0;
-			return *this;
-		}
+		/// Construct a vector from initializer list. The vector will have size as the initializer
+		/// and all elements will be copied
+		/// @param[in] l The initializer list
+		Vector(const std::initializer_list<T>& l) noexcept;
+
+		/// Move construct from another vector
+		Vector(Vector<T>&& other) noexcept;
+
+		/// Move assignment from another vector
+		Vector<T>& operator=(Vector<T>&& other) noexcept;
 
 		Vector(const Vector<T>&) = delete;
 		Vector<T>& operator=(const Vector<T>&) = delete;
 
-		~Vector() {
-			free(data);
-			data = nullptr;
-			size = 0;
-		}
+		~Vector();
 
-		void init(const int size) {
-			if(this->size != size) {
-				free(data);
-				this->size = size;
-				data = static_cast<T*>(malloc(size * sizeof(T)));
-			}
-		}
+		/// Initialize the vector. It is safe to call init two (or more times). If the size of the
+		/// vector is larger of than the new size there will be no allocation or deallocation of memory,
+		/// only the size field will be changed. If the size of the vector is less than the new size
+		/// the data will be resized accordingly.
+		/// @param[in] size The number of elements the vector should have
+		void init(const int size);
 
-		void init(const int size, const T val) {
-			if(this->size != size) {
-				this->size = size;
-				free(data);
-				initDataWithVal(val);
-			} else {
-				fill(val);
-			}
-		}
+		/// Initialize the vector and set all elements with the passed value. It is safe to call init two (or more times).
+		/// If the size of the vector is larger of than the new size there will be no allocation or deallocation of memory,
+		/// only the size field will be changed. If the size of the vector is less than the new size
+		/// the data will be resized accordingly.
+		/// @param[in] size The number of elements the vector should have
+		/// @param[in] val The value which all elements will take
+		void init(const int size, const T val);
 
-		const int getSize() const {
-			return this->size;
-		}
+		/// Delete the data allocated by the vector
+		void deinit() noexcept;
 
-		operator T* const() {
-			return data;
-		}
+		/// @returns The number of elements in the vector
+		const int getSize() const;
 
-		T operator[](const int index) const {
-			assert(index < size);
-			return data[index];
-		}
+		/// Cast the vector to a pointer of the underlying type
+		operator T* const();
 
-		T& operator[](const int index) {
-			assert(index < size);
-			return data[index];
-		}
+		/// Returns a const reference to the element at specified location pos. No bounds checking is performed.
+		/// @param[in] index Position of the element to return
+		/// @returns Const reference to the requested element.
+		const T& operator[](const int index) const;
 
-		Vector<T>& operator+=(const Vector<T>& other) {
-			assert(other.size == size);
-			for (int i = 0; i < size; ++i) {
-				data[i] += other[i];
-			}
-			return *this;
-		}
+		/// Returns a reference to the element at specified location pos. No bounds checking is performed.
+		/// @param[in] index Position of the element to return
+		/// @returns Reference to the requested element.
+		T& operator[](const int index);
 
-		Vector<T>& operator-=(const Vector<T>& other) {
-			assert(other.size == size);
-			for (int i = 0; i < size; ++i) {
-				data[i] -= other[i];
-			}
-			return *this;
-		}
+		/// Inplace addition of two vectors. The two vectors must be of the same size (no checks are performed however)
+		/// @param[in] other The vector which will be added to the current one
+		/// @returns Reference to this which will contain this + other
+		Vector<T>& operator+=(const Vector<T>& other);
 
-		const T secondNorm() const {
-			T sum = 0.0f;
-			for (int i = 0; i < size; ++i) {
-				sum += data[i] * data[i];
-			}
-			return std::sqrt(sum);
-		}
+		/// Inplace subtraction of two vectors. The two vectors must be of the same size (no checks are performed however)
+		/// @param[in] other The vector which will be subtracted from the current one
+		/// @returns Reference to this which will contain this - other
+		Vector<T>& operator-=(const Vector<T>& other);
 
-		const T secondNormSquared() const {
-			T sum(0);
-			for (int i = 0; i < size; ++i) {
-				sum += data[i] * data[i];
-			}
-			return sum;
-		}
+		/// Compute the L2 (Euclidian) norm of the vector
+		/// @returns L2 norm of the vector
+		T secondNorm() const;
 
-		const T operator*(const Vector<T>& other) const {
-			assert(other.size == size);
-			T dot(0);
-			for (int i = 0; i < size; ++i) {
-				dot += other[i] * data[i];
-			}
-			return dot;
-		}
+		/// Compute the L2 (Euclidian) norm of the vector squared.
+		/// @returns L2 norm of the vector squared.
+		T secondNormSquared() const;
 
-		T* const begin() noexcept {
-			return data;
-		}
+		/// Compute the dot product of two vectors
+		/// @param[in] other The vector which will be dotted with this
+		/// @returns The dot product of this and other
+		const T operator*(const Vector<T>& other) const;
 
-		T* const end() noexcept {
-			return data + size;
-		}
+		/// Iterator to the beggining of the vector
+		/// @returns Iterator to the beggining of the vector
+		Iterator begin() noexcept;
 
-		void fill(const T value) {
-			if(value == 0.0f) {
-				memset(data, 0, sizeof(T) * size);
-			} else {
-				std::fill_n(data, size, value);
-			}
-		}
+		/// Iterator to one past the last element. Should not be dereferenced.
+		/// @returns Iterator to the end of the vector.
+		Iterator end() noexcept;
+
+		/// Constant iterator to the beggining of the vector
+		/// @returns Constant iterator to the beggining of the vector
+		ConstIterator begin() const noexcept;
+
+		/// Constant terator to one past the last element. Should not be dereferenced.
+		/// @returns Constant iterator to the end of the vector.
+		ConstIterator end() const noexcept;
+
+		/// Constant iterator to the beggining of the vector
+		/// @returns Constant iterator to the beggining of the vector
+		ConstIterator cbegin() const noexcept;
+
+		/// Constant terator to one past the last element. Should not be dereferenced.
+		/// @returns Constant iterator to the end of the vector.
+		ConstIterator cend() const noexcept;
+
+		/// Fill all elements of the vector with the current value
+		/// @param[in] value The to which all elements will be set
+		void fill(const T value);
 
 	private:
-		void initDataWithVal(const T val) {
-			if (val == 0.0f) {
-				data = static_cast<T*>(calloc(size, sizeof(T)));
-			} else {
-				const int64_t byteSize = int64_t(size) * sizeof(T);
-				data = static_cast<T*>(malloc(byteSize));
-				if (!data) return;
-				for (int i = 0; i < this->size; ++i) {
-					data[i] = val;
-				}
-			}
-		}
+		/// Allocate new memory for the vector and set all elements to val
+		void initDataWithVal(const T val);
 		T* data;
 		int size;
 	};
+
+
+	template<typename T>
+	Vector<T>::Vector() noexcept :
+		size(0),
+		data(nullptr)
+	{ }
+
+	template<typename T>
+	Vector<T>::Vector(const int size) noexcept :
+		size(size),
+		data(static_cast<T*>(malloc(size * sizeof(T))))
+	{ }
+
+	template<typename T>
+	Vector<T>::Vector(const int size, const T val) noexcept :
+		size(size)
+	{
+		initDataWithVal(val);
+	}
+
+	template<typename T>
+	Vector<T>::Vector(const std::initializer_list<T>& l) noexcept :
+		size(l.size()),
+		data(static_cast<T*>(malloc(l.size() * sizeof(T))))
+	{
+		std::copy(l.begin(), l.end(), data);
+	}
+
+	template<typename T>
+	Vector<T>::Vector(Vector<T>&& other) noexcept :
+		size(other.size) {
+		free(data);
+		data = other.data;
+		other.data = nullptr;
+		other.size = 0;
+	}
+
+	template<typename T>
+	Vector<T>& Vector<T>::operator=(Vector<T>&& other) noexcept {
+		size = other.size;
+		free(data);
+		data = other.data;
+		other.data = nullptr;
+		other.size = 0;
+		return *this;
+	}
+
+	template<typename T>
+	Vector<T>::~Vector() {
+		deinit();
+	}
+
+	template<typename T>
+	void Vector<T>::init(const int size) {
+		if(this->size < size) {
+			data = static_cast<T*>(realloc(data, size * sizeof(T)));
+			assert(data != nullptr);
+		}
+		this->size = size;
+	}
+
+	template<typename T>
+	void Vector<T>::init(const int size, const T val) {
+		init(size);
+		fill(val);
+	}
+
+	template<typename T>
+	void Vector<T>::deinit() noexcept {
+		free(data);
+		data = nullptr;
+		size = 0;
+	}
+
+	template<typename T>
+	const int Vector<T>::getSize() const {
+		return this->size;
+	}
+
+	template<typename T>
+	Vector<T>::operator T* const() {
+		return data;
+	}
+
+	template<typename T>
+	const T& Vector<T>::operator[](const int index) const {
+		assert(index < size && index >= 0);
+		return data[index];
+	}
+
+	template<typename T>
+	T& Vector<T>::operator[](const int index) {
+		assert(index < size && index >= 0);
+		return data[index];
+	}
+
+	template<typename T>
+	Vector<T>& Vector<T>::operator+=(const Vector<T>& other) {
+		assert(other.size == size);
+		for (int i = 0; i < size; ++i) {
+			data[i] += other[i];
+		}
+		return *this;
+	}
+
+	template<typename T>
+	Vector<T>& Vector<T>::operator-=(const Vector<T>& other) {
+		assert(other.size == size);
+		for (int i = 0; i < size; ++i) {
+			data[i] -= other[i];
+		}
+		return *this;
+	}
+
+	template<typename T>
+	T Vector<T>::secondNorm() const {
+		T sum = 0.0f;
+		for (int i = 0; i < size; ++i) {
+			sum += data[i] * data[i];
+		}
+		return std::sqrt(sum);
+	}
+
+	template<typename T>
+	T Vector<T>::secondNormSquared() const {
+		T sum(0);
+		for (int i = 0; i < size; ++i) {
+			sum += data[i] * data[i];
+		}
+		return sum;
+	}
+
+	template<typename T>
+	const T Vector<T>::operator*(const Vector<T>& other) const {
+		assert(other.size == size);
+		T dot(0);
+		for (int i = 0; i < size; ++i) {
+			dot += other[i] * data[i];
+		}
+		return dot;
+	}
+
+	template<typename T>
+	typename Vector<T>::Iterator Vector<T>::begin() noexcept {
+		return data;
+	}
+
+	template<typename T>
+	typename Vector<T>::Iterator Vector<T>::end() noexcept {
+		return data + size;
+	}
+
+	template<typename T>
+	typename Vector<T>::ConstIterator Vector<T>::begin() const noexcept {
+		return data;
+	}
+
+	template<typename T>
+	typename Vector<T>::ConstIterator Vector<T>::end() const noexcept {
+		return data + size;
+	}
+
+	template<typename T>
+	typename Vector<T>::ConstIterator Vector<T>::cbegin() const noexcept {
+		return data;
+	}
+
+	template<typename T>
+	typename Vector<T>::ConstIterator Vector<T>::cend() const noexcept {
+		return data + size;
+	}
+
+	template<typename T>
+	void Vector<T>::fill(const T value) {
+		if(value == T(0)) {
+			memset(data, 0, sizeof(T) * size);
+		} else {
+			std::fill_n(data, size, value);
+		}
+	}
+
+	template<typename T>
+	void Vector<T>::initDataWithVal(const T val) {
+		if (val == T(0)) {
+			data = static_cast<T*>(calloc(size, sizeof(T)));
+		} else {
+			const int64_t byteSize = int64_t(size) * sizeof(T);
+			data = static_cast<T*>(malloc(byteSize));
+			if (!data) return;
+			for (int i = 0; i < this->size; ++i) {
+				data[i] = val;
+			}
+		}
+	}
 
 #ifdef SMM_DEBUG_DOUBLE
 	using real = double;
