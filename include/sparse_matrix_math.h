@@ -365,7 +365,7 @@ namespace SMM {
 	template<typename Container, typename T>
 	class TripletEl {
 
-	template<typename> friend class TripletMatrixConstIterator;
+	template<typename,typename> friend class TripletMatrixConstIterator;
 
 	public:
 		TripletEl(const TripletEl&) noexcept = default;
@@ -405,22 +405,16 @@ namespace SMM {
 		swap(a.it, b.it);
 	}
 
-#ifdef SMM_DEBUG_DOUBLE
-	using real = double;
-#else
-	using real = float;
-#endif
-
-	template<typename Container>
+	template<typename Container, typename T>
 	class TripletMatrixConstIterator {
 	
 	template<typename> friend class _TripletMatrixCommon;
 
 	public:
 		using iterator_category = std::forward_iterator_tag;
-		using value_type = TripletEl<Container, real>;
-		using pointer = const TripletEl<Container, real>*;
-		using reference = const TripletEl<Container, real>&;
+		using value_type = TripletEl<Container, T>;
+		using pointer = const TripletEl<Container, T>*;
+		using reference = const TripletEl<Container, T>&;
 
 		TripletMatrixConstIterator& operator=(const TripletMatrixConstIterator&) = default;
 
@@ -454,13 +448,19 @@ namespace SMM {
 		template<typename> friend void swap(TripletMatrixConstIterator& a, TripletMatrixConstIterator& b) noexcept;
 	private:
 		TripletMatrixConstIterator(typename Container::const_iterator it) : currentEl(it) {}
-		TripletEl<Container, real> currentEl;
+		TripletEl<Container, T> currentEl;
 	};
 
-	template<typename Container>
-	inline void swap(TripletMatrixConstIterator<Container>& a, TripletMatrixConstIterator<Container>& b) noexcept {
+	template<typename Container, typename T>
+	inline void swap(TripletMatrixConstIterator<Container, T>& a, TripletMatrixConstIterator<Container, T>& b) noexcept {
 		swap(a.currentEl, b.currentEl);
 	}
+
+#ifdef SMM_DEBUG_DOUBLE
+	using real = double;
+#else
+	using real = float;
+#endif
 
 	/// @brief Class to hold sparse matrix into triplet (coordinate) format.
 	/// Triplet format represents the matrix entries as list of triplets (row, col, value)
@@ -472,7 +472,7 @@ namespace SMM {
 	template<typename Container>
 	class _TripletMatrixCommon {
 	public:
-		using ConstIterator = TripletMatrixConstIterator<Container>;
+		using ConstIterator = TripletMatrixConstIterator<Container, real>;
 		_TripletMatrixCommon();
 		/// @brief Initialize triplet matrix with given number of rows and columns
 		/// The number of rows and columns does not have any affect the space allocated by the matrix
