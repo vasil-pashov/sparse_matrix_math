@@ -280,7 +280,7 @@ namespace SMM {
 
 	template<typename T>
 	inline T Vector<T>::secondNorm() const {
-		T sum = 0.0f;
+		T sum = 0.0;
 		for (int i = 0; i < size; ++i) {
 			sum += data[i] * data[i];
 		}
@@ -466,6 +466,7 @@ namespace SMM {
 	template<typename Container, typename T>
 	class _TripletMatrixCommon {
 	public:
+		using value_type = T;
 		using ConstIterator = TripletMatrixConstIterator<Container, T>;
 		_TripletMatrixCommon();
 		/// @brief Initialize triplet matrix with given number of rows and columns
@@ -637,12 +638,6 @@ namespace SMM {
 		return denseColCount;
 	}
 
-#ifdef SMM_DEBUG_DOUBLE
-	using real = double;
-#else
-	using real = float;
-#endif
-
 	template<typename T>
 	using TripletMatrix = _TripletMatrixCommon<std::map<uint64_t, T>, T>;
 
@@ -677,16 +672,16 @@ namespace SMM {
 	template<typename MatrixPtrT>
 	class _CSRIteratorBase {
 	public:
-
+		using el_value_type = typename std::remove_pointer_t<MatrixPtrT>::value_type;
 		friend class _CSRIteratorBase<make_ptr_to_const_t<MatrixPtrT>>;
 		class CSRElement {
 		public:
 			friend class _CSRIteratorBase<MatrixPtrT>;
 			friend class _CSRIteratorBase<make_ptr_to_const_t<MatrixPtrT>>;
-			const real getValue() const noexcept;
+			const el_value_type getValue() const noexcept;
 			const int getRow() const noexcept;
 			const int getCol() const noexcept;
-			void setValue(real value) noexcept;
+			void setValue(el_value_type value) noexcept;
 			friend void swap(CSRElement& a, CSRElement& b) noexcept;
 			CSRElement(
 				MatrixPtrT m,
@@ -811,12 +806,12 @@ namespace SMM {
 	}
 
 	template<typename MatrixPtrT>
-	inline const real _CSRIteratorBase<MatrixPtrT>::CSRElement::getValue() const noexcept {
+	inline const typename _CSRIteratorBase<MatrixPtrT>::el_value_type _CSRIteratorBase<MatrixPtrT>::CSRElement::getValue() const noexcept {
 		return m->values[currentPositionIndex];
 	}
 
 	template<typename MatrixPtrT>
-	inline void _CSRIteratorBase<MatrixPtrT>::CSRElement::setValue(const real value) noexcept {
+	inline void _CSRIteratorBase<MatrixPtrT>::CSRElement::setValue(const typename _CSRIteratorBase<MatrixPtrT>::el_value_type value) noexcept {
 		m->values[currentPositionIndex] = value;
 	}
 
@@ -968,8 +963,6 @@ namespace SMM {
 		ILU0
 	};
 
-#undef real
-
 	/// @brief Base class for matrix in compressed sparse row format
 	/// Compressed sparse row format is represented with 3 arrays. One for the values,
 	/// one to keep track nonzero columns for each row, one to keep track where each row
@@ -981,6 +974,8 @@ namespace SMM {
 
 		using RowIterator = CSRRowIterator<CSRMatrix<T>*>;
 		using ConstRowIterator = CSRRowIterator<const CSRMatrix<T>*>;
+
+		using value_type = T;
 
 		friend class _CSRIteratorBase<const CSRMatrix<T>*>;
 		friend class _CSRIteratorBase<CSRMatrix<T>*>;
@@ -1326,7 +1321,7 @@ namespace SMM {
 
 	template<typename T>
 	inline CSRMatrix<T>::CSRMatrix(const TripletMatrix<T>& triplet) noexcept :
-		values(new real[triplet.getNonZeroCount()]),
+		values(new T[triplet.getNonZeroCount()]),
 		positions(new int[triplet.getNonZeroCount()]),
 		start(new int[triplet.getDenseRowCount() + 1]),
 		denseRowCount(triplet.getDenseRowCount()),
@@ -1341,7 +1336,7 @@ namespace SMM {
 		denseRowCount = triplet.getDenseRowCount();
 		denseColCount = triplet.getDenseColCount();
 		const int nnz = triplet.getNonZeroCount();
-		values.reset(new real[nnz]);
+		values.reset(new T[nnz]);
 		if (!values) {
 			return 1;
 		}
@@ -1475,7 +1470,7 @@ namespace SMM {
 	) const noexcept {
 		int prevRow = 0;
 		for (int row = firstActiveStart; row < denseRowCount; row = getNextStartIndex(row, denseRowCount)) {
-			T dot = 0.0f;
+			T dot = 0.0;
 			// Handles the case when rows are missing from the matrix
 			// Makes sense only for vector multiplication as when there is addition or subtraction
 			// the out vector holds the correct result
@@ -1488,7 +1483,7 @@ namespace SMM {
 			// Does the regular operation
 			for (int colIdx = start[row]; colIdx < start[row + 1]; ++colIdx) {
 				const int col = positions[colIdx];
-				const real val = values[colIdx];
+				const T val = values[colIdx];
 				dot = _smm_fma(val, mult[col], dot);
 			}
 			out[row] = op(lhs[row], dot);
@@ -1536,7 +1531,7 @@ namespace SMM {
 			const int start = startIdx == 0 ? firstActiveStart : getNextStartIndex(startIdx - 1, denseRowCount);
 			int prevRow = startIdx;
 			for (int row = start; row < end; row = getNextStartIndex(row, denseRowCount)) {
-				T dot = 0.0f;
+				T dot = 0.0;
 				// Handles the case when rows are missing from the matrix
 				// Makes sense only for vector multiplication as when there is addition or subtraction
 				// the out vector holds the correct result
@@ -1548,7 +1543,7 @@ namespace SMM {
 				// Does the regular operation
 				for (int colIdx = this->start[row]; colIdx < this->start[row + 1]; ++colIdx) {
 					const int col = positions[colIdx];
-					const real val = values[colIdx];
+					const T val = values[colIdx];
 					dot = _smm_fma(val, mult[col], dot);
 				}
 				out[row] = op(lhs[row], dot);
@@ -1772,8 +1767,8 @@ namespace SMM {
 				return 1;
 			}
 			int col = m.positions[indexInRow];
-			real value = m.values[indexInRow];
-			real lhs = rhs[row];
+			T value = m.values[indexInRow];
+			T lhs = rhs[row];
 			while(col < row) {
 				lhs = _smm_fma(-value, x[col], lhs);
 				++indexInRow;
@@ -1791,8 +1786,8 @@ namespace SMM {
 		for(int row = m.getDenseRowCount() - 1; row >= 0; --row) {
 			int indexInRow = m.start[row + 1] - 1;
 			int col = m.positions[indexInRow];
-			real value = m.values[indexInRow];
-			real lhs(0);
+			T value = m.values[indexInRow];
+			T lhs(0);
 			while(col > row) {
 				lhs = _smm_fma(value, x[col], lhs);
 				--indexInRow;
@@ -1826,7 +1821,7 @@ namespace SMM {
 		const int rows = m.getDenseRowCount();
 		const int cols = m.getDenseColCount();
 		assert(rows == cols);
-		memcpy(ilu0Val.get(), m.values.get(), sizeof(real) * m.getNonZeroCount());
+		memcpy(ilu0Val.get(), m.values.get(), sizeof(T) * m.getNonZeroCount());
 		assert(m.firstActiveStart == 0 && "The matrix does not have full rank");
 		if(m.firstActiveStart != 0) {
 			return 1;
@@ -1842,8 +1837,8 @@ namespace SMM {
 		std::vector<int> columnIndex(cols, -1);
 		// TODO [Move Diagonal To End]: This can be avoided if the diagonal elements are kept in a fixed position in each row
 		// For example keep the diagonal element in the end of the row.
-		Vector<real> diagonalElementsInv(rows);
-		diagonalElementsInv[0] = real(1) / m.values[0];
+		Vector<T> diagonalElementsInv(rows);
+		diagonalElementsInv[0] = T(1.0) / m.values[0];
 		// The algorithm assumes that the columns in each row are sorted in increasing order
 		// U will have explicit main diagonal, L will have implicit main diagonal filled with 1
 		// The first row is trivial to compute, as u_{i,j} = m_{i,j} / l_{i,j}, but l_{i,j} = 1
@@ -1858,20 +1853,20 @@ namespace SMM {
 			int kPos = rowStart;
 			int k = m.positions[kPos];
 			for(; k < row; k = m.positions[++kPos]) {
-				const real alphaIK = ilu0Val[kPos] * diagonalElementsInv[k];
+				const T alphaIK = ilu0Val[kPos] * diagonalElementsInv[k];
 				ilu0Val[kPos] = alphaIK;
 				for(int colPos = m.start[k + 1] - 1, col = m.positions[colPos]; col > 0; col = m.positions[--colPos]) {
-					const real betaKJ = ilu0Val[colPos];
+					const T betaKJ = ilu0Val[colPos];
 					if(columnIndex[col] != -1) {
 						ilu0Val[columnIndex[col]] -= alphaIK * betaKJ;
 					}
 				}
 			}
-			assert(k == row && ilu0Val[kPos] > 1e-6f && "Zero in pivot position!");
-			if(k == row && ilu0Val[kPos] > 1e-6f) {
+			assert(k == row && ilu0Val[kPos] > 1e-6 && "Zero in pivot position!");
+			if(k == row && ilu0Val[kPos] > 1e-6) {
 				return 2;
 			}
-			diagonalElementsInv[k] = real(1) / ilu0Val[kPos];
+			diagonalElementsInv[k] = T(1.0) / ilu0Val[kPos];
 			// Clear the column indexes and prepare them for the next iterations
 			for(int i = rowStart; i < rowEnd; ++i) {
 				const int column = m.positions[i];
@@ -1897,7 +1892,7 @@ namespace SMM {
 		const int rows = m.getDenseRowCount();
 		// Solve L.y = rhs, y = Transpose(L).x
 		for(int row = 0; row < rows; ++row) {
-			real sum = rhs[row];
+			T sum = rhs[row];
 			const int rowStart = m.start[row];
 			const int rowEnd = m.start[row+1];
 			int j = rowStart;
@@ -1913,7 +1908,7 @@ namespace SMM {
 
 		// Solve Transpose(L).x = y
 		for(int row = rows - 1; row >= 0; --row) {
-			real sum = x[row];
+			T sum = x[row];
 			const int rowStart = m.start[row];
 			const int rowEnd = m.start[row+1];
 			int j = rowEnd - 1;
@@ -1934,7 +1929,7 @@ namespace SMM {
 		const int nnz = m.getNonZeroCount();
 		const int rows = m.getDenseRowCount();
 		assert(rows == m.getDenseColCount());
-		ic0Val.reset(new real[nnz]);
+		ic0Val.reset(new T[nnz]);
 		// For each row this will be an offset to where we can put a value. For the i-th element we have that
 		// nextFreeSlot[i] >= 0 && nextFreeSlot[i] < CSRMatrix::start[i + 1] - CSRMatrix::start[i] i.e. the i-th elements is
 		// between 0 and the number of nonzero elements in the row. In order to obtain the correcto position
@@ -1955,7 +1950,7 @@ namespace SMM {
 				usedColumns[col] = j;
 			}
 			// Use separate loop to handle the diagonal element
-			real diagonalElement(0);
+			T diagonalElement(0);
 			int columnIndex = m.start[i];
 			int column = m.positions[columnIndex];
 			while(column < i) {
@@ -1973,7 +1968,7 @@ namespace SMM {
 			assert(std::abs(diagonalElement) > 1e-6 && "The diagonal element is 0. The matrix is not possitive definite.");
 			ic0Val[diagonalPosition] = diagonalElement;
 			nextFreeSlot[i]++;
-			const real diagonalIversed = real(1) / diagonalElement;
+			const T diagonalIversed = T(1) / diagonalElement;
 			
 			// When we represent the matrix in the form L*Transpose(L) for the element at position (i, j)
 			// of the original matrix is given by: a_i,j = Sum(l_i,k * l_k,j). Because of the symmetry of the matrix
@@ -1987,7 +1982,7 @@ namespace SMM {
 					continue;
 				}
 				// The most inner loop of the tree is just doing the sum: Sum(l_i,k * l_j,k) for k < i 
-				real sum(0);
+				T sum(0);
 				const int rowEnd = m.start[j+1];
 				int k = rowStart, column = m.positions[k];
 				while(k < rowEnd && column < i) {
@@ -2019,12 +2014,6 @@ namespace SMM {
 		}
 		return 0;
 	}
-
-#ifdef SMM_DEBUG_DOUBLE
-	using real = double;
-#else
-	using real = float;
-#endif
 
 	template<typename T>
 	inline void saveDenseText(const char* filepath, const CSRMatrix<T>& m) {
@@ -2098,7 +2087,7 @@ namespace SMM {
 	/// @param[in] compressed Matrix in Compressed Sparse Row format
 	/// @param[out] out Preallocated (and filled with zero) space where the dense matrix will be added
 	template<typename CompressedMatrixFormat>
-	inline void toLinearDenseRowMajor(const CompressedMatrixFormat& compressed, real* out) noexcept {
+	inline void toLinearDenseRowMajor(const CompressedMatrixFormat& compressed, typename CompressedMatrixFormat::value_type* out) noexcept {
 		const int64_t colCount = compressed.getDenseColCount();
 		for (const auto& el : compressed) {
 			const int64_t index = el.getRow() * colCount + el.getCol();
@@ -2131,22 +2120,22 @@ namespace SMM {
 			maxIterations = a.getDenseRowCount();
 		}
 
-		Vector<real> r(a.getDenseRowCount());
+		Vector<T> r(a.getDenseRowCount());
 		a.rMultSub(b, x, r);
 
-		Vector<real> p(a.getDenseRowCount());
+		Vector<T> p(a.getDenseRowCount());
 		for (int i = 0; i < p.getSize(); ++i) {
 			p[i] = r[i];
 		}
 
-		Vector<real> ap(a.getDenseRowCount());
+		Vector<T> ap(a.getDenseRowCount());
 
-		real rSquare = r * r;
+		T rSquare = r * r;
 		int iterations = 0;
-		real infNorm = real(0);
+		T infNorm = T(0);
 		do {
 			a.rMult(p, ap);
-			const real denom = ap* p;
+			const T denom = ap* p;
 #ifdef SMM_DEBUG_PRINT
 			std::cout << "i: " << iterations << std::endl;
 			std::cout << "r^2: " << rSquare << std::endl;
@@ -2161,8 +2150,8 @@ namespace SMM {
 			if (eps > std::abs(denom) && rSquare > 1) {
 				return SolverStatus::DIVERGED;
 			}
-			const real alpha = rSquare / denom;
-			infNorm = real(0);
+			const T alpha = rSquare / denom;
+			infNorm = T(0);
 			for(int i = 0; i < a.getDenseRowCount(); ++i) {
 				x[i] += alpha * p[i];
 				r[i] -= alpha * ap[i];
@@ -2170,7 +2159,7 @@ namespace SMM {
 			}
 			// Dot product r * r can be zero (or close to zero) only if r has length close to zero.
 			// But if the residual is close to zero, this means that we have found a solution
-			const real newRSquare = r * r;
+			const T newRSquare = r * r;
 #ifdef SMM_DEBUG_PRINT
 			std::cout << "alpha: " << alpha << std::endl;
 			std::cout << "new r^2: " << newRSquare << std::endl;
@@ -2181,7 +2170,7 @@ namespace SMM {
 			if(newRSquare > 1 && rSquare < eps) {
 				return SolverStatus::DIVERGED;
 			}
-			const real beta = newRSquare / rSquare;
+			const T beta = newRSquare / rSquare;
 #ifdef SMM_DEBUG_PRINT
 			std::cout << "beta: " << beta << std::endl;
 			std::cout << "==================================================" << std::endl;
@@ -2212,38 +2201,38 @@ namespace SMM {
 		}
 
 		const int rows = a.getDenseRowCount();
-		Vector<real> r(rows), r0(rows);
+		Vector<T> r(rows), r0(rows);
 		a.rMultSub(b, x, r);
 		
 		// Help vectors, as in Saad's book, the vectors in the polynomial reccursion are: q, p, r
 		// They can be expressed only in terms of themselves, the other vectors do same some computation
 		// of the use a lot of memory they can be removed.
-		Vector<real> p(rows), u(rows), q(rows), alphaUQ(rows), ap(rows);
+		Vector<T> p(rows), u(rows), q(rows), alphaUQ(rows), ap(rows);
 		for(int i = 0; i < rows; ++i) {
 			p[i] = r[i];
 			u[i] = r[i];
 			r0[i] = r[i];
 		}
 
-		real rr0 = r * r0;
-		real infNorm = real(0);
+		T rr0 = r * r0;
+		T infNorm = T(0);
 		int iterations = 0;
 		do {
 			a.rMult(p, ap);
-			const real denom = ap * r0;
+			const T denom = ap * r0;
 			// Must investigate if denom < eps is critical breakdown
-			const real alpha = rr0 / denom;
+			const T alpha = rr0 / denom;
 			for(int i = 0; i < rows; ++i) {
 				q[i] = _smm_fma(-alpha, ap[i], u[i]);
 				alphaUQ[i] = alpha * (u[i] + q[i]);
 				x[i] = x[i] + alphaUQ[i];
 			}
 			a.rMultSub(r, alphaUQ, r);
-			const real newRR0 = r * r0;
+			const T newRR0 = r * r0;
 			// Must investigate if rr0 < eps is critical breakdown
-			const real beta = newRR0 / rr0;
+			const T beta = newRR0 / rr0;
 			
-			infNorm = real(0);
+			infNorm = T(0);
 			for(int i = 0; i < rows; ++i) {
 				u[i] = _smm_fma(beta, q[i], r[i]);
 				p[i] = _smm_fma(beta, _smm_fma(beta, p[i], q[i]), u[i]);
@@ -2287,13 +2276,13 @@ namespace SMM {
 		const int rows = a.getDenseRowCount();
 		// This vector is allocated only if there is some preconditioner different than the identity
 		// It is used to store intermediate data needed by the preconditioner
-		Vector<real> precondScratchpad;
+		Vector<T> precondScratchpad;
 		constexpr bool precondition = !std::is_same<Preconditioner, decltype(a.template getPreconditioner<SolverPreconditioner::NONE>())>::value;
 		if constexpr(precondition) {
 			precondScratchpad.init(rows);
 		}
 
-		Vector<real> r(rows), r0(rows), p(rows), ap(rows), s(rows), as(rows);
+		Vector<T> r(rows), r0(rows), p(rows), ap(rows), s(rows), as(rows);
 		a.rMultSub(b, x, r);
 
 		if constexpr(precondition) {
@@ -2308,9 +2297,9 @@ namespace SMM {
 			p[i] = r[i];
 		}
 
-		real resL2Norm = real(0);
+		T resL2Norm = T(0);
 		int iterations = 0;
-		real rr0 = r * r0;
+		T rr0 = r * r0;
 		do {
 			if constexpr(precondition) {
 				a.rMult(p, precondScratchpad);
@@ -2322,8 +2311,8 @@ namespace SMM {
 				a.rMult(p, ap);
 			}
 
-			real denom = ap * r0;
-			const real alpha = rr0 / denom;
+			T denom = ap * r0;
+			const T alpha = rr0 / denom;
 			for(int i = 0; i < rows; ++i) {
 				s[i] = _smm_fma(-alpha, ap[i], r[i]);
 			}
@@ -2340,17 +2329,17 @@ namespace SMM {
 
 			denom = as * as;
 			// TODO: add proper check for division by zero
-			const real omega = (as * s) / denom;
-			resL2Norm = real(0);
+			const T omega = (as * s) / denom;
+			resL2Norm = T(0);
 			for(int i = 0; i < rows; ++i) {
 				x[i] = _smm_fma(alpha, p[i], _smm_fma(omega, s[i], x[i])); 
 				r[i] = _smm_fma(-omega, as[i], s[i]); 
 				resL2Norm += r[i] * r[i];
 			}
 			resL2Norm = std::sqrt(resL2Norm);
-			const real newRR0 = r * r0;
+			const T newRR0 = r * r0;
 			// TODO: add proper check for division by zero
-			const real beta = (newRR0 * alpha) / (rr0 * omega);
+			const T beta = (newRR0 * alpha) / (rr0 * omega);
 			for(int i = 0; i < rows; ++i) {
 				p[i] = _smm_fma(beta, (_smm_fma(-omega, ap[i], p[i])), r[i]);
 			}
@@ -2414,12 +2403,12 @@ namespace SMM {
 		// 7. 	beta_j = (r_{j+1}, r_{j+1}) / (r_j, r_j)
 		// 8.	p_{j+1} = r_{j+1} + beta_j * p_j
 		const int rows = a.getDenseRowCount();
-		const real epsSuared = eps * eps;
-		Vector r(rows, real(0));
+		const T epsSuared = eps * eps;
+		Vector<T> r(rows, T(0));
 		a.rMultSub(b, x0, r);
 
-		Vector<real> p(rows), Ap(rows, real(0));
-		real residualNormSquared = 0;
+		Vector<T> p(rows), Ap(rows, T(0));
+		T residualNormSquared = 0;
 		for(int i = 0; i < rows; ++i) {
 			p[i] = r[i];
 			residualNormSquared += r[i] * r[i];
@@ -2433,17 +2422,17 @@ namespace SMM {
 		// We have initial condition different than the output vector on the first iteration when we compute
 		// x = x + alpha * p, we must have the x on the right hand side to be the initial condition x. And on all
 		// next iterations it must be the output vector.
-		const real* currentX = x0;
+		const T* currentX = x0;
 		for(int i = 0; i < maxIterations; ++i) {
 			a.rMult(p, Ap);
-			const real pAp = Ap * p;
+			const T pAp = Ap * p;
 			// If the denominator is 0 we have a lucky breakdown. The residual at the previous step must be 0.
 			assert(pAp != 0);
 			// alpha = (r_i, r_i) / (Ap, p)
-			const real alpha = residualNormSquared / pAp;
+			const T alpha = residualNormSquared / pAp;
 			// x = x + alpha * p
 			// r = r - alpha * Ap
-			real newResidualNormSquared = 0;
+			T newResidualNormSquared = 0;
 			for(int j = 0; j < rows; ++j) {
 				x[j] = _smm_fma(alpha, p[j], currentX[j]);
 				r[j] = _smm_fma(-alpha, Ap[j], r[j]);
@@ -2453,7 +2442,7 @@ namespace SMM {
 				return SolverStatus::SUCCESS;
 			}
 			// beta = (r_{i+1}, r_(i+1)) / (r_i, r_i)
-			const real beta = newResidualNormSquared / residualNormSquared;
+			const T beta = newResidualNormSquared / residualNormSquared;
 			residualNormSquared = newResidualNormSquared;
 			// p = r + beta * p
 			for(int j = 0; j < rows; ++j) {
@@ -2500,14 +2489,14 @@ namespace SMM {
 		// 9.	beta_j = (r_{j+1}, z_{j+1}) / (r_j, z_j)
 		// 10.	p_{j+1} = z_{j+1} + beta_j * p_j
 		const int rows = a.getDenseRowCount();
-		const real epsSuared = eps * eps;
-		Vector<real> r(rows, 0);
-		Vector<real> z(rows, 0);
-		Vector<real> p(rows, 0);
+		const T epsSuared = eps * eps;
+		Vector<T> r(rows, 0);
+		Vector<T> z(rows, 0);
+		Vector<T> p(rows, 0);
 		a.rMultSub(b, x0, r);
 		M.apply(r, z);
-		real rz = 0;
-		real residualNormSquared = 0;
+		T rz = 0;
+		T residualNormSquared = 0;
 		for(int i = 0; i < rows; ++i) {
 			rz += r[i] * z[i];
 			p[i] = z[i];
@@ -2519,18 +2508,18 @@ namespace SMM {
 		if(maxIterations == -1) {
 			maxIterations = rows;
 		}
-		Vector<real> Ap(rows, 0);
+		Vector<T> Ap(rows, 0);
 		// We have initial condition different than the output vector on the first iteration when we compute
 		// x = x + alpha * p, we must have the x on the right hand side to be the initial condition x. And on all
 		// next iterations it must be the output vector.
-		const real* currentX = x0;
+		const T* currentX = x0;
 		for(int i = 0; i < maxIterations; ++i) {
 			a.rMult(p, Ap);
-			const real pAp = Ap * p;
+			const T pAp = Ap * p;
 			// If the denominator is 0 we have a lucky breakdown. The residual at the previous step must be 0.
 			assert(pAp != 0);
 			// alpha_j = (r_j, z_j) / (A.p_j, p_j)
-			const real alpha = rz / pAp;
+			const T alpha = rz / pAp;
 			// x_{j+1} = x_j + alpha_j * p_j
 			// r_{j+1} = r_j - alpha_j * A.p_j
 			for(int j = 0; j < rows; ++j) {
@@ -2538,7 +2527,7 @@ namespace SMM {
 				r[j] = _smm_fma(-alpha, Ap[j], r[j]);
 			}
 			M.apply(r, z);
-			real newRZ = 0;
+			T newRZ = 0;
 			residualNormSquared = 0;
 			for(int j = 0; j < rows; ++j) {
 				newRZ += r[j] * z[j];
@@ -2547,7 +2536,7 @@ namespace SMM {
 			if(epsSuared > residualNormSquared) {
 				return SMM::SolverStatus::SUCCESS;
 			}
-			const real beta = newRZ / rz;
+			const T beta = newRZ / rz;
 			// p_{j+1} = z_{j+1} + beta_j * p_j
 			for(int j = 0; j < rows; ++j) {
 				p[j] = _smm_fma(beta, p[j], z[j]);
@@ -2641,7 +2630,7 @@ namespace SMM {
 		int filerow = 0;
 		while (!file.eof()) {
 			int row, col;
-			real value;
+			T value;
 			file >> row >> col >> value;
 			if (file.fail()) {
 				return MatrixLoadStatus::FAILED_TO_PARSE_FILE;
@@ -2680,7 +2669,7 @@ namespace SMM {
 		for (int i = 0; i < rows; ++i) {
 			file.ignore(std::numeric_limits<std::streamsize>::max(), '{');
 			for (int j = 0; j < cols; ++j) {
-				real val;
+				T val;
 				file >> val;
 				if (file.fail()) {
 					return MatrixLoadStatus::FAILED_TO_PARSE_FILE;

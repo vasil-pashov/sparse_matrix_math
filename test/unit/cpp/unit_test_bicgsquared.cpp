@@ -5,7 +5,7 @@
 template<typename T>
 class BiCGSquared : public SolverTest<T> {
 protected:
-	SMM::SolverStatus solve(const SMM::CSRMatrix& a, SMM::real* b, SMM::real* x, int maxIterations, SMM::real eps) override {
+	SMM::SolverStatus solve(const SMM::CSRMatrix<T>& a, T* b, T* x, int maxIterations, T eps) override {
 		return SMM::BiCGSquared(a, b, x, maxIterations, eps);
 	}
 };
@@ -20,7 +20,7 @@ class BiCGSquared_Indefinite : public BiCGSquared<T> {
 
 };
 
-using MyTypes = ::testing::Types<SMM::real>;
+using MyTypes = ::testing::Types<float, double>;
 TYPED_TEST_SUITE(BiCGSquared, MyTypes);
 TYPED_TEST_SUITE(BiCGSquared_PositiveDefinite, MyTypes);
 TYPED_TEST_SUITE(BiCGSquared_Indefinite, MyTypes);
@@ -34,13 +34,13 @@ TYPED_TEST(BiCGSquared, SmallDenseMatrix) {
 			triplet.addEntry(row, col, dense[row * 4 + col]);
 		}
 	}
-	SMM::CSRMatrix csr(triplet);
+	SMM::CSRMatrix<TypeParam> csr(triplet);
 	SMM::Vector<TypeParam> b({1,2,3,4});
 	SMM::Vector<TypeParam> x(4, 0);
-	EXPECT_EQ(this->solve(csr, b, x, -1, L2Epsilon()), SMM::SolverStatus::SUCCESS);
+	EXPECT_EQ(this->solve(csr, b, x, -1, L2Epsilon<TypeParam>()), SMM::SolverStatus::SUCCESS);
 	TypeParam resRef[4] = { -5.57856, -5.62417, 6.40556, 11.9399 };
 	for (int i = 0; i < 4; ++i) {
-		EXPECT_NEAR(x[i], resRef[i], MaxInfEpsilon());
+		EXPECT_NEAR(x[i], resRef[i], MaxInfEpsilon<TypeParam>());
 	}
 }
 

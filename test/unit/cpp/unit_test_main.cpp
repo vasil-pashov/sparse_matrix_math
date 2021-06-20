@@ -3,8 +3,8 @@
 #include <vector>
 #include <utility>
 namespace SMM {
-	template<typename A, typename B>
-	testing::AssertionResult NearMatrix(const A& lhs, const B& rhs, const real eps) {
+	template<typename A, typename B, typename T = std::enable_if_t<std::is_same_v<typename A::value_type, typename B::value_type>, typename A::value_type>>
+	testing::AssertionResult NearMatrix(const A& lhs, const B& rhs, const T eps) {
 		if (lhs.getNonZeroCount() != rhs.getNonZeroCount()) {
 			return testing::AssertionFailure() << "Matrices have different count of non zero elements. lhs has: " << lhs.getNonZeroCount() << " rhs has: " << rhs.getNonZeroCount();
 		}
@@ -16,8 +16,8 @@ namespace SMM {
 			return testing::AssertionFailure() << "Matrices have different count of columns. lhs has: " << lhs.getDenseColCount() << " rhs has: " << rhs.getDenseColCount();
 		}
 		const size_t sz = size_t(lhs.getDenseColCount()) * lhs.getDenseRowCount();
-		std::vector<real> adense(sz, 0);
-		std::vector<real> bdense(sz, 0);
+		std::vector<typename A::value_type> adense(sz, 0);
+		std::vector<typename A::value_type> bdense(sz, 0);
 		SMM::toLinearDenseRowMajor(lhs, adense.data());
 		SMM::toLinearDenseRowMajor(rhs, bdense.data());
 		for (int row = 0; row < lhs.getDenseRowCount(); ++row) {
@@ -37,7 +37,7 @@ namespace SMM {
 template <typename T>
 class TripletMatrixTest : public testing::Test {};
 
-using MyTypes = ::testing::Types<SMM::real>;
+using MyTypes = ::testing::Types<float, double>;
 TYPED_TEST_SUITE(TripletMatrixTest, MyTypes);
 
 
@@ -65,16 +65,16 @@ TYPED_TEST(TripletMatrixTest, AddElementsCount) {
 	SMM::TripletMatrix<TypeParam> m(numRows, numCols);
 	EXPECT_EQ(m.getNonZeroCount(), 0);
 
-	m.addEntry(1, 1, 1.0f);
+	m.addEntry(1, 1, 1.0);
 	EXPECT_EQ(m.getNonZeroCount(), 1);
 
-	m.addEntry(2, 2, 1.0f);
+	m.addEntry(2, 2, 1.0);
 	EXPECT_EQ(m.getNonZeroCount(), 2);
 
-	m.addEntry(1, 1, 5.0f);
+	m.addEntry(1, 1, 5.0);
 	EXPECT_EQ(m.getNonZeroCount(), 2);
 
-	m.addEntry(3, 5, 10.0f);
+	m.addEntry(3, 5, 10.0);
 	EXPECT_EQ(m.getNonZeroCount(), 3);
 }
 
@@ -86,16 +86,16 @@ TYPED_TEST(TripletMatrixTest, AddElementsAllocPreCount) {
 	SMM::TripletMatrix<TypeParam> m(numRows, numCols, numElements);
 	EXPECT_EQ(m.getNonZeroCount(), 0);
 
-	m.addEntry(1, 1, 1.0f);
+	m.addEntry(1, 1, 1.0);
 	EXPECT_EQ(m.getNonZeroCount(), 1);
 
-	m.addEntry(2, 2, 1.0f);
+	m.addEntry(2, 2, 1.0);
 	EXPECT_EQ(m.getNonZeroCount(), 2);
 
-	m.addEntry(1, 1, 5.0f);
+	m.addEntry(1, 1, 5.0);
 	EXPECT_EQ(m.getNonZeroCount(), 2);
 
-	m.addEntry(3, 5, 10.0f);
+	m.addEntry(3, 5, 10.0);
 	EXPECT_EQ(m.getNonZeroCount(), 3);
 }
 
@@ -105,28 +105,28 @@ TYPED_TEST(TripletMatrixTest, ToLinearDenseRowMajor) {
 	const int numElements = 10;
 	SMM::TripletMatrix<TypeParam> m(numRows, numCols, numElements);
 	const int denseSize = numRows * numCols;
-	const SMM::real denseRef[denseSize] = {
-		4.5f, 0.0f, 3.2f, 0.0f,
-		3.1f, 2.9f, 0.0f, 0.9f,
-		0.0f, 1.7f, 3.0f, 0.0f,
-		3.5f, 0.4f, 0.0f, 1.0f
+	const TypeParam denseRef[denseSize] = {
+		4.5, 0.0, 3.2, 0.0,
+		3.1, 2.9, 0.0, 0.9,
+		0.0, 1.7, 3.0, 0.0,
+		3.5, 0.4, 0.0, 1.0
 	};
-	m.addEntry(0, 0, 3.0f); // Add (0, 0) as sum
-	m.addEntry(0, 2, 3.2f);
-	m.addEntry(1, 1, 2.9f);
-	m.addEntry(0, 0, 1.0f); // Add (0, 0) as sum
-	m.addEntry(0, 0, 0.5f); // Add (0, 0) as sum
-	m.addEntry(1, 0, 3.1f);
-	m.addEntry(1, 3, 0.9f);
-	m.addEntry(2, 2, 2.1f); // Add (2,2) as sum
-	m.addEntry(2, 1, 2.0f); // Add (2, 1) as sum
-	m.addEntry(2, 2, 0.9f); // Add (2,2) as sum
-	m.addEntry(2, 1, -0.3f); // Add (2, 1) as sum
-	m.addEntry(3, 0, 3.5f);
-	m.addEntry(3, 1, 0.4f);
-	m.addEntry(3, 3, 1.0f);
+	m.addEntry(0, 0, 3.0); // Add (0, 0) as sum
+	m.addEntry(0, 2, 3.2);
+	m.addEntry(1, 1, 2.9);
+	m.addEntry(0, 0, 1.0); // Add (0, 0) as sum
+	m.addEntry(0, 0, 0.5); // Add (0, 0) as sum
+	m.addEntry(1, 0, 3.1);
+	m.addEntry(1, 3, 0.9);
+	m.addEntry(2, 2, 2.1); // Add (2,2) as sum
+	m.addEntry(2, 1, 2.0); // Add (2, 1) as sum
+	m.addEntry(2, 2, 0.9); // Add (2,2) as sum
+	m.addEntry(2, 1, -0.3); // Add (2, 1) as sum
+	m.addEntry(3, 0, 3.5);
+	m.addEntry(3, 1, 0.4);
+	m.addEntry(3, 3, 1.0);
 
-	SMM::real dense[denseSize] = {};
+	TypeParam dense[denseSize] = {};
 	SMM::toLinearDenseRowMajor(m, dense);
 	for (int i = 0; i < denseSize; ++i) {
 		EXPECT_NEAR(dense[i], denseRef[i], 10e-6);
@@ -139,26 +139,26 @@ TYPED_TEST(TripletMatrixTest, DirectAccessors) {
 	const int numElements = 10;
 	SMM::TripletMatrix<TypeParam> m(numRows, numCols, numElements);
 	const int denseSize = numRows * numCols;
-	SMM::real denseRef[denseSize] = {
-		4.5f, 0.0f, 3.2f, 0.0f,
-		3.1f, 2.9f, 0.0f, 0.9f,
-		0.0f, 1.7f, 3.0f, 0.0f,
-		3.5f, 0.4f, 0.0f, 1.0f
+	TypeParam denseRef[denseSize] = {
+		4.5, 0.0, 3.2, 0.0,
+		3.1, 2.9, 0.0, 0.9,
+		0.0, 1.7, 3.0, 0.0,
+		3.5, 0.4, 0.0, 1.0
 	};
-	m.addEntry(0, 0, 3.0f); // Add (0, 0) as sum
-	m.addEntry(0, 2, 3.2f);
-	m.addEntry(1, 1, 2.9f);
-	m.addEntry(0, 0, 1.0f); // Add (0, 0) as sum
-	m.addEntry(0, 0, 0.5f); // Add (0, 0) as sum
-	m.addEntry(1, 0, 3.1f);
-	m.addEntry(1, 3, 0.9f);
-	m.addEntry(2, 2, 2.1f); // Add (2,2) as sum
-	m.addEntry(2, 1, 2.0f); // Add (2, 1) as sum
-	m.addEntry(2, 2, 0.9f); // Add (2,2) as sum
-	m.addEntry(2, 1, -0.3f); // Add (2, 1) as sum
-	m.addEntry(3, 0, 3.5f);
-	m.addEntry(3, 1, 0.4f);
-	m.addEntry(3, 3, 1.0f);
+	m.addEntry(0, 0, 3.0); // Add (0, 0) as sum
+	m.addEntry(0, 2, 3.2);
+	m.addEntry(1, 1, 2.9);
+	m.addEntry(0, 0, 1.0); // Add (0, 0) as sum
+	m.addEntry(0, 0, 0.5); // Add (0, 0) as sum
+	m.addEntry(1, 0, 3.1);
+	m.addEntry(1, 3, 0.9);
+	m.addEntry(2, 2, 2.1); // Add (2,2) as sum
+	m.addEntry(2, 1, 2.0); // Add (2, 1) as sum
+	m.addEntry(2, 2, 0.9); // Add (2,2) as sum
+	m.addEntry(2, 1, -0.3); // Add (2, 1) as sum
+	m.addEntry(3, 0, 3.5);
+	m.addEntry(3, 1, 0.4);
+	m.addEntry(3, 3, 1.0);
 
 	for(int i = 0; i < numRows; ++i) {
 		for(int j = 0; j < numCols; ++j) {
@@ -176,7 +176,7 @@ TYPED_TEST(TripletMatrixTest, DirectAccessors) {
 
 	denseRef[1 * numCols + 3] = 200;
 
-	SMM::real dense[denseSize] = {};
+	TypeParam dense[denseSize] = {};
 	SMM::toLinearDenseRowMajor(m, dense);
 	for (int i = 0; i < denseSize; ++i) {
 		EXPECT_NEAR(dense[i], denseRef[i], 10e-6);
@@ -198,28 +198,28 @@ TYPED_TEST(CSRMatrixTest, DirectAccessors) {
 	const int numElements = 10;
 	SMM::TripletMatrix<TypeParam> triplet(numRows, numCols, numElements);
 	const int denseSize = numRows * numCols;
-	SMM::real denseRef[denseSize] = {
-		4.5f, 0.0f, 3.2f, 0.0f,
-		3.1f, 2.9f, 0.0f, 0.9f,
-		0.0f, 1.7f, 3.0f, 0.0f,
-		3.5f, 0.4f, 0.0f, 1.0f
+	TypeParam denseRef[denseSize] = {
+		4.5, 0.0, 3.2, 0.0,
+		3.1, 2.9, 0.0, 0.9,
+		0.0, 1.7, 3.0, 0.0,
+		3.5, 0.4, 0.0, 1.0
 	};
-	triplet.addEntry(0, 0, 3.0f); // Add (0, 0) as sum
-	triplet.addEntry(0, 2, 3.2f);
-	triplet.addEntry(1, 1, 2.9f);
-	triplet.addEntry(0, 0, 1.0f); // Add (0, 0) as sum
-	triplet.addEntry(0, 0, 0.5f); // Add (0, 0) as sum
-	triplet.addEntry(1, 0, 3.1f);
-	triplet.addEntry(1, 3, 0.9f);
-	triplet.addEntry(2, 2, 2.1f); // Add (2,2) as sum
-	triplet.addEntry(2, 1, 2.0f); // Add (2, 1) as sum
-	triplet.addEntry(2, 2, 0.9f); // Add (2,2) as sum
-	triplet.addEntry(2, 1, -0.3f); // Add (2, 1) as sum
-	triplet.addEntry(3, 0, 3.5f);
-	triplet.addEntry(3, 1, 0.4f);
-	triplet.addEntry(3, 3, 1.0f);
+	triplet.addEntry(0, 0, 3.0); // Add (0, 0) as sum
+	triplet.addEntry(0, 2, 3.2);
+	triplet.addEntry(1, 1, 2.9);
+	triplet.addEntry(0, 0, 1.0); // Add (0, 0) as sum
+	triplet.addEntry(0, 0, 0.5); // Add (0, 0) as sum
+	triplet.addEntry(1, 0, 3.1);
+	triplet.addEntry(1, 3, 0.9);
+	triplet.addEntry(2, 2, 2.1); // Add (2,2) as sum
+	triplet.addEntry(2, 1, 2.0); // Add (2, 1) as sum
+	triplet.addEntry(2, 2, 0.9); // Add (2,2) as sum
+	triplet.addEntry(2, 1, -0.3); // Add (2, 1) as sum
+	triplet.addEntry(3, 0, 3.5);
+	triplet.addEntry(3, 1, 0.4);
+	triplet.addEntry(3, 3, 1.0);
 
-	SMM::CSRMatrix m;
+	SMM::CSRMatrix<TypeParam> m;
 	m.init(triplet);
 
 	for(int i = 0; i < numRows; ++i) {
@@ -238,7 +238,7 @@ TYPED_TEST(CSRMatrixTest, DirectAccessors) {
 
 	denseRef[1 * numCols + 3] = 200;
 
-	SMM::real dense[denseSize] = {};
+	TypeParam dense[denseSize] = {};
 	SMM::toLinearDenseRowMajor(m, dense);
 	for (int i = 0; i < denseSize; ++i) {
 		EXPECT_NEAR(dense[i], denseRef[i], 10e-6);
@@ -250,16 +250,16 @@ TYPED_TEST(CSRMatrixTest, RowIterators) {
 	const int numCols = 4;
 	SMM::TripletMatrix<TypeParam> triplet(numRows, numCols);
 	const int denseSize = numRows * numCols;
-	const SMM::real denseRef[numRows][numCols] = {
-		{0.0f, 0.0f, 0.0f, 0.0f},
-		{4.5f, 0.0f, 3.2f, 0.0f},
-		{3.1f, 2.9f, 0.0f, 0.9f},
-		{0.0f, 1.7f, 3.0f, 0.0f},
-		{0.0f, 0.0f, 0.0f, 0.0f},
-		{0.0f, 0.0f, 0.0f, 0.0f},
-		{3.5f, 0.4f, 0.0f, 1.0f},
-		{0.0f, 0.0f, 0.0f, 0.0f},
-		{0.0f, 0.0f, 0.0f, 0.0f}
+	const TypeParam denseRef[numRows][numCols] = {
+		{0.0, 0.0, 0.0, 0.0},
+		{4.5, 0.0, 3.2, 0.0},
+		{3.1, 2.9, 0.0, 0.9},
+		{0.0, 1.7, 3.0, 0.0},
+		{0.0, 0.0, 0.0, 0.0},
+		{0.0, 0.0, 0.0, 0.0},
+		{3.5, 0.4, 0.0, 1.0},
+		{0.0, 0.0, 0.0, 0.0},
+		{0.0, 0.0, 0.0, 0.0}
 	};
 	int numElementsInRow[numRows] = {};
 	for(int i = 0; i < numRows; ++i) {
@@ -271,13 +271,13 @@ TYPED_TEST(CSRMatrixTest, RowIterators) {
 		}
 	}
 
-	SMM::CSRMatrix m;
+	SMM::CSRMatrix<TypeParam> m;
 	m.init(triplet);
 
 	for(int i = 0; i < numRows; ++i) {
 		int numElements = 0;
-		SMM::CSRMatrix::ConstRowIterator current = m.rowBegin(i);
-		SMM::CSRMatrix::ConstRowIterator rowEnd = m.rowEnd(i);
+		typename SMM::CSRMatrix<TypeParam>::ConstRowIterator current = m.rowBegin(i);
+		typename SMM::CSRMatrix<TypeParam>::ConstRowIterator rowEnd = m.rowEnd(i);
 		while(current != rowEnd) {
 			EXPECT_EQ(current->getValue(), denseRef[current->getRow()][current->getCol()]);
 			numElements++;
@@ -287,9 +287,9 @@ TYPED_TEST(CSRMatrixTest, RowIterators) {
 	}
 
 	{
-		SMM::real current = 0.0;
+		TypeParam current = 0.0;
 		for(int i = 0; i < numRows; ++i) {
-			SMM::CSRMatrix::RowIterator row = m.rowBegin(i);
+			typename SMM::CSRMatrix<TypeParam>::RowIterator row = m.rowBegin(i);
 			for(int j = 0; j < numCols && row != m.rowEnd(i); ++j) {
 				row->setValue(current++);
 				++row;
@@ -329,10 +329,10 @@ TYPED_TEST(CSMatrixCtorTest, ConstructFromTriplet) {
 	SMM::TripletMatrix<TypeParam> triplet(numRows, numCols, numElements);
 	EXPECT_EQ(triplet.getNonZeroCount(), 0);
 
-	triplet.addEntry(1, 1, 1.0f);
-	triplet.addEntry(2, 2, 1.0f);
-	triplet.addEntry(1, 1, 5.0f);
-	triplet.addEntry(3, 5, 10.0f);
+	triplet.addEntry(1, 1, 1.0);
+	triplet.addEntry(2, 2, 1.0);
+	triplet.addEntry(1, 1, 5.0);
+	triplet.addEntry(3, 5, 10.0);
 
 	SMM::CSRMatrix csr(triplet);
 	EXPECT_EQ(csr.getDenseRowCount(), triplet.getDenseRowCount());
@@ -351,27 +351,27 @@ TYPED_TEST(CSMatrixToLinearRowMajor, ToLinearDenseRowMajor) {
 	const int numElements = 10;
 	SMM::TripletMatrix<TypeParam> triplet(numRows, numCols, numElements);
 	const int denseSize = numRows * numCols;
-	const SMM::real denseRef[denseSize] = {
-		4.5f, 0.0f, 3.2f, 0.0f,
-		3.1f, 2.9f, 0.0f, 0.9f,
-		0.0f, 1.7f, 3.0f, 0.0f,
-		3.5f, 0.4f, 0.0f, 1.0f
+	const TypeParam denseRef[denseSize] = {
+		4.5, 0.0, 3.2, 0.0,
+		3.1, 2.9, 0.0, 0.9,
+		0.0, 1.7, 3.0, 0.0,
+		3.5, 0.4, 0.0, 1.0
 	};
-	triplet.addEntry(0, 0, 4.5f);
-	triplet.addEntry(0, 2, 3.2f);
-	triplet.addEntry(1, 0, 3.1f);
-	triplet.addEntry(1, 1, 2.9f);
-	triplet.addEntry(1, 3, 0.9f);
-	triplet.addEntry(2, 1, 1.7f);
-	triplet.addEntry(2, 2, 3.0f);
-	triplet.addEntry(3, 0, 3.5f);
-	triplet.addEntry(3, 1, 0.4f);
-	triplet.addEntry(3, 3, 1.0f);
+	triplet.addEntry(0, 0, 4.5);
+	triplet.addEntry(0, 2, 3.2);
+	triplet.addEntry(1, 0, 3.1);
+	triplet.addEntry(1, 1, 2.9);
+	triplet.addEntry(1, 3, 0.9);
+	triplet.addEntry(2, 1, 1.7);
+	triplet.addEntry(2, 2, 3.0);
+	triplet.addEntry(3, 0, 3.5);
+	triplet.addEntry(3, 1, 0.4);
+	triplet.addEntry(3, 3, 1.0);
 
 	SMM::CSRMatrix csr(triplet);
 	EXPECT_EQ(triplet.getNonZeroCount(), csr.getNonZeroCount());
 
-	SMM::real dense[denseSize] = {};
+	TypeParam dense[denseSize] = {};
 	SMM::toLinearDenseRowMajor(csr, dense);
 	for (int i = 0; i < denseSize; ++i) {
 		EXPECT_EQ(dense[i], denseRef[i]);
@@ -401,7 +401,7 @@ protected:
 		m.init(triplet);
 	}
 	
-	SMM::CSRMatrix m;
+	SMM::CSRMatrix<T> m;
 };
 
 template<typename T>
@@ -412,7 +412,7 @@ TYPED_TEST(CSMatrixRMultAdd, EmptyMatrix) {
 	const int numRows = CSMatrixRMultOp<TypeParam>::numRows;
 	TypeParam mult[numRows] = { 1,2,3,4 };
 	TypeParam add[numRows] = { 5,6,7,8 };
-	const SMM::real resRef[numRows] = { 5,6,7,8 };
+	TypeParam resRef[numRows] = { 5,6,7,8 };
 	SMM::TripletMatrix<TypeParam> emptyTriplet(4, 4, 10);
 	SMM::CSRMatrix emptyMatrix(emptyTriplet);
 	emptyMatrix.rMultAdd(add, mult, add);
@@ -475,7 +475,7 @@ TYPED_TEST(CSMatrixRMultSub, EmptyMatrix) {
 	const int numRows = CSMatrixRMultSub<TypeParam>::numRows;
 	TypeParam mult[numRows] = { 1,2,3,4 };
 	TypeParam add[numRows] = { 5,6,7,8 };
-	const SMM::real resRef[numRows] = { 5,6,7,8 };
+	const TypeParam resRef[numRows] = { 5,6,7,8 };
 	SMM::TripletMatrix<TypeParam> emptyTriplet(4, 4, 10);
 	SMM::CSRMatrix emptyMatrix(emptyTriplet);
 	emptyMatrix.rMultSub(add, mult, add);
@@ -541,20 +541,20 @@ TYPED_TEST(CSRMatrixTest, CSRMatrixEmptyConstForwardIterator) {
 TYPED_TEST(CSRMatrixTest, CSRMatrixConstForwardIterator) {
 	const int numRows = 6;
 	const int numCols = 6;
-	SMM::real denseRef[numRows][numCols] = {};
-	denseRef[1][1] = 1.1f;
-	denseRef[1][2] = 2.2f;
-	denseRef[1][3] = 3.3f;
-	denseRef[4][4] = 4.4f;
+	TypeParam denseRef[numRows][numCols] = {};
+	denseRef[1][1] = 1.1;
+	denseRef[1][2] = 2.2;
+	denseRef[1][3] = 3.3;
+	denseRef[4][4] = 4.4;
 
 	SMM::TripletMatrix<TypeParam> triplet(numRows, numCols);
-	triplet.addEntry(4, 4, 4.4f);
-	triplet.addEntry(1, 1, 1.1f);
-	triplet.addEntry(1, 2, 2.2f);
-	triplet.addEntry(1, 3, 3.3f);
+	triplet.addEntry(4, 4, 4.4);
+	triplet.addEntry(1, 1, 1.1);
+	triplet.addEntry(1, 2, 2.2);
+	triplet.addEntry(1, 3, 3.3);
 
-	SMM::CSRMatrix csr(triplet);
-	SMM::CSRMatrix::ConstIterator it = csr.begin();
+	SMM::CSRMatrix<TypeParam> csr(triplet);
+	typename SMM::CSRMatrix<TypeParam>::ConstIterator it = csr.begin();
 
 	EXPECT_EQ(it->getRow(), 1);
 	EXPECT_EQ(it->getValue(), denseRef[it->getRow()][it->getCol()]);
@@ -603,7 +603,7 @@ TYPED_TEST(CSRArithmetic, MultiplyByScalar) {
 		}
 	}
 
-	SMM::CSRMatrix csr;
+	SMM::CSRMatrix<TypeParam> csr;
 	csr.init(triplet);
 
 	TypeParam scalar = -478.53439;
@@ -645,10 +645,10 @@ TYPED_TEST(CSRArithmetic, InplaceAdd) {
 		}
 	}
 
-	SMM::CSRMatrix csr1;
+	SMM::CSRMatrix<TypeParam> csr1;
 	csr1.init(triplet1);
 
-	SMM::CSRMatrix csr2;
+	SMM::CSRMatrix<TypeParam> csr2;
 	csr2.init(triplet2);
 
 	csr1.inplaceAdd(csr2);
@@ -687,10 +687,10 @@ TYPED_TEST(CSRArithmetic, InplaceSubtract) {
 		}
 	}
 
-	SMM::CSRMatrix csr1;
+	SMM::CSRMatrix<TypeParam> csr1;
 	csr1.init(triplet1);
 
-	SMM::CSRMatrix csr2;
+	SMM::CSRMatrix<TypeParam> csr2;
 	csr2.init(triplet2);
 
 	csr1.inplaceSubtract(csr2);
@@ -749,14 +749,14 @@ TYPED_TEST(SaveDense, CSRSMMDT) {
 	triplet.addEntry(5, 6, 4);
 	triplet.addEntry(6, 1, 3.4);
 	for (int i = 0; i < 10; ++i) triplet.addEntry(9, i, 1);
-	SMM::CSRMatrix csr(triplet);
+	SMM::CSRMatrix<TypeParam> csr(triplet);
 	FileRemoveRAII file(ASSET_PATH + std::string("__test.smmdt"));
 	SMM::saveDenseText(file.getName(), csr);
 
 	SMM::TripletMatrix<TypeParam> tripletRead;
 	const SMM::MatrixLoadStatus status = SMM::loadMatrix(file.getName(), tripletRead);
 	ASSERT_EQ(status, SMM::MatrixLoadStatus::SUCCESS);
-	EXPECT_TRUE(NearMatrix(tripletRead, csr, 1e-6));
+	EXPECT_TRUE(NearMatrix(tripletRead, csr, TypeParam(1e-6)));
 }
 
 int main(int argc, char **argv)
