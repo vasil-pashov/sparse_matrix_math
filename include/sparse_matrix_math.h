@@ -166,26 +166,26 @@ namespace SMM {
 
 
 	template<typename T>
-	Vector<T>::Vector() noexcept :
+	inline Vector<T>::Vector() noexcept :
 		size(0),
 		data(nullptr)
 	{ }
 
 	template<typename T>
-	Vector<T>::Vector(const int size) noexcept :
+	inline Vector<T>::Vector(const int size) noexcept :
 		size(size),
 		data(static_cast<T*>(malloc(size * sizeof(T))))
 	{ }
 
 	template<typename T>
-	Vector<T>::Vector(const int size, const T val) noexcept :
+	inline Vector<T>::Vector(const int size, const T val) noexcept :
 		size(size)
 	{
 		initDataWithVal(val);
 	}
 
 	template<typename T>
-	Vector<T>::Vector(const std::initializer_list<T>& l) noexcept :
+	inline Vector<T>::Vector(const std::initializer_list<T>& l) noexcept :
 		size(l.size()),
 		data(static_cast<T*>(malloc(l.size() * sizeof(T))))
 	{
@@ -193,7 +193,7 @@ namespace SMM {
 	}
 
 	template<typename T>
-	Vector<T>::Vector(Vector<T>&& other) noexcept :
+	inline Vector<T>::Vector(Vector<T>&& other) noexcept :
 		size(other.size) {
 		free(data);
 		data = other.data;
@@ -202,7 +202,7 @@ namespace SMM {
 	}
 
 	template<typename T>
-	Vector<T>& Vector<T>::operator=(Vector<T>&& other) noexcept {
+	inline Vector<T>& Vector<T>::operator=(Vector<T>&& other) noexcept {
 		size = other.size;
 		free(data);
 		data = other.data;
@@ -212,12 +212,12 @@ namespace SMM {
 	}
 
 	template<typename T>
-	Vector<T>::~Vector() {
+	inline Vector<T>::~Vector() {
 		deinit();
 	}
 
 	template<typename T>
-	void Vector<T>::init(const int size) {
+	inline void Vector<T>::init(const int size) {
 		if(this->size < size) {
 			data = static_cast<T*>(realloc(data, size * sizeof(T)));
 			assert(data != nullptr);
@@ -226,42 +226,42 @@ namespace SMM {
 	}
 
 	template<typename T>
-	void Vector<T>::init(const int size, const T val) {
+	inline void Vector<T>::init(const int size, const T val) {
 		init(size);
 		fill(val);
 	}
 
 	template<typename T>
-	void Vector<T>::deinit() noexcept {
+	inline void Vector<T>::deinit() noexcept {
 		free(data);
 		data = nullptr;
 		size = 0;
 	}
 
 	template<typename T>
-	const int Vector<T>::getSize() const {
+	inline const int Vector<T>::getSize() const {
 		return this->size;
 	}
 
 	template<typename T>
-	Vector<T>::operator T*() {
+	inline Vector<T>::operator T*() {
 		return data;
 	}
 
 	template<typename T>
-	const T& Vector<T>::operator[](const int index) const {
+	inline const T& Vector<T>::operator[](const int index) const {
 		assert(index < size && index >= 0);
 		return data[index];
 	}
 
 	template<typename T>
-	T& Vector<T>::operator[](const int index) {
+	inline T& Vector<T>::operator[](const int index) {
 		assert(index < size && index >= 0);
 		return data[index];
 	}
 
 	template<typename T>
-	Vector<T>& Vector<T>::operator+=(const Vector<T>& other) {
+	inline Vector<T>& Vector<T>::operator+=(const Vector<T>& other) {
 		assert(other.size == size);
 		for (int i = 0; i < size; ++i) {
 			data[i] += other[i];
@@ -270,7 +270,7 @@ namespace SMM {
 	}
 
 	template<typename T>
-	Vector<T>& Vector<T>::operator-=(const Vector<T>& other) {
+	inline Vector<T>& Vector<T>::operator-=(const Vector<T>& other) {
 		assert(other.size == size);
 		for (int i = 0; i < size; ++i) {
 			data[i] -= other[i];
@@ -279,7 +279,7 @@ namespace SMM {
 	}
 
 	template<typename T>
-	T Vector<T>::secondNorm() const {
+	inline T Vector<T>::secondNorm() const {
 		T sum = 0.0f;
 		for (int i = 0; i < size; ++i) {
 			sum += data[i] * data[i];
@@ -288,7 +288,7 @@ namespace SMM {
 	}
 
 	template<typename T>
-	T Vector<T>::secondNormSquared() const {
+	inline T Vector<T>::secondNormSquared() const {
 		T sum(0);
 		for (int i = 0; i < size; ++i) {
 			sum += data[i] * data[i];
@@ -297,7 +297,7 @@ namespace SMM {
 	}
 
 	template<typename T>
-	const T Vector<T>::operator*(const Vector<T>& other) const {
+	inline const T Vector<T>::operator*(const Vector<T>& other) const {
 		assert(other.size == size);
 		T dot(0);
 		for (int i = 0; i < size; ++i) {
@@ -307,37 +307,37 @@ namespace SMM {
 	}
 
 	template<typename T>
-	typename Vector<T>::Iterator Vector<T>::begin() noexcept {
+	inline typename Vector<T>::Iterator Vector<T>::begin() noexcept {
 		return data;
 	}
 
 	template<typename T>
-	typename Vector<T>::Iterator Vector<T>::end() noexcept {
+	inline typename Vector<T>::Iterator Vector<T>::end() noexcept {
 		return data + size;
 	}
 
 	template<typename T>
-	typename Vector<T>::ConstIterator Vector<T>::begin() const noexcept {
+	inline typename Vector<T>::ConstIterator Vector<T>::begin() const noexcept {
 		return data;
 	}
 
 	template<typename T>
-	typename Vector<T>::ConstIterator Vector<T>::end() const noexcept {
+	inline typename Vector<T>::ConstIterator Vector<T>::end() const noexcept {
 		return data + size;
 	}
 
 	template<typename T>
-	typename Vector<T>::ConstIterator Vector<T>::cbegin() const noexcept {
+	inline typename Vector<T>::ConstIterator Vector<T>::cbegin() const noexcept {
 		return data;
 	}
 
 	template<typename T>
-	typename Vector<T>::ConstIterator Vector<T>::cend() const noexcept {
+	inline typename Vector<T>::ConstIterator Vector<T>::cend() const noexcept {
 		return data + size;
 	}
 
 	template<typename T>
-	void Vector<T>::fill(const T value) {
+	inline void Vector<T>::fill(const T value) {
 		if(value == T(0)) {
 			memset(data, 0, sizeof(T) * size);
 		} else {
@@ -346,7 +346,7 @@ namespace SMM {
 	}
 
 	template<typename T>
-	void Vector<T>::initDataWithVal(const T val) {
+	inline void Vector<T>::initDataWithVal(const T val) {
 		if (val == T(0)) {
 			data = static_cast<T*>(calloc(size, sizeof(T)));
 		} else {
@@ -1297,22 +1297,22 @@ namespace SMM {
 		static T vectorMultFunctor([[maybe_unused]]const T lhs, const T rhs) {
 			return rhs;
 		}
+
+		static_assert(std::is_convertible_v<CSRMatrix<T>::ConstIterator, CSRMatrix<T>::ConstIterator>);
+		static_assert(std::is_convertible_v<CSRMatrix::Iterator, CSRMatrix::ConstIterator>);
+		static_assert(! std::is_convertible_v<CSRMatrix::ConstIterator, CSRMatrix::Iterator>);
+		static_assert(std::is_convertible_v<CSRMatrix::Iterator, CSRMatrix::Iterator>);
+		static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::ConstIterator>);
+		static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::Iterator>);
+
+		static_assert(std::is_convertible_v<CSRMatrix::ConstRowIterator, CSRMatrix::ConstRowIterator>);
+		static_assert(std::is_convertible_v<CSRMatrix::RowIterator, CSRMatrix::ConstRowIterator>);
+		static_assert(! std::is_convertible_v<CSRMatrix::ConstRowIterator, CSRMatrix::RowIterator>);
+		static_assert(std::is_convertible_v<CSRMatrix::RowIterator, CSRMatrix::RowIterator>);
+		static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::ConstRowIterator>);
+		static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::RowIterator>);
+
 	};
-
-/*
-	static_assert(std::is_convertible_v<CSRMatrix::ConstIterator, CSRMatrix::ConstIterator>);
-	static_assert(std::is_convertible_v<CSRMatrix::Iterator, CSRMatrix::ConstIterator>);
-	static_assert(! std::is_convertible_v<CSRMatrix::ConstIterator, CSRMatrix::Iterator>);
-	static_assert(std::is_convertible_v<CSRMatrix::Iterator, CSRMatrix::Iterator>);
-	static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::ConstIterator>);
-	static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::Iterator>);
-
-	static_assert(std::is_convertible_v<CSRMatrix::ConstRowIterator, CSRMatrix::ConstRowIterator>);
-	static_assert(std::is_convertible_v<CSRMatrix::RowIterator, CSRMatrix::ConstRowIterator>);
-	static_assert(! std::is_convertible_v<CSRMatrix::ConstRowIterator, CSRMatrix::RowIterator>);
-	static_assert(std::is_convertible_v<CSRMatrix::RowIterator, CSRMatrix::RowIterator>);
-	static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::ConstRowIterator>);
-	static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::RowIterator>);*/
 
 	template<typename T>
 	inline CSRMatrix<T>::CSRMatrix() noexcept :
