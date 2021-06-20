@@ -25,6 +25,18 @@
 #define SMM_PATCH_VERSION 0
 
 namespace SMM {
+	namespace {
+		/// Perform a * x + b, based on compilerd defines this might use actual fused multiply add call
+		template<typename T>
+		const inline T _smm_fma(T a, T x, T b) {
+			#ifdef SMM_WITH_STD_FMA
+				return std::fma(a, x, b);
+			#else
+				return a * x + b;
+			#endif
+		}
+	}
+
 	template<typename T>
 	class Vector {
 	public:
@@ -398,18 +410,6 @@ namespace SMM {
 #else
 	using real = float;
 #endif
-
-	namespace {
-		/// Perform a * x + b, based on compilerd defines this might use actual fused multiply add call
-		const inline real _smm_fma(real a, real x, real b) {
-			#ifdef SMM_WITH_STD_FMA
-				return std::fma(a, x, b);
-			#else
-				return a * x + b;
-			#endif
-		}
-	}
-
 
 	template<typename Container>
 	class TripletMatrixConstIterator {
