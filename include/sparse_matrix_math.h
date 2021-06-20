@@ -347,24 +347,10 @@ namespace SMM {
 		}
 	}
 
-#ifdef SMM_DEBUG_DOUBLE
-	using real = double;
-#else
-	using real = float;
-#endif
-
-	namespace {
-		/// Perform a * x + b, based on compilerd defines this might use actual fused multiply add call
-		const inline real _smm_fma(real a, real x, real b) {
-			#ifdef SMM_WITH_STD_FMA
-				return std::fma(a, x, b);
-			#else
-				return a * x + b;
-			#endif
-		}
-	}
-
-	template<typename Container>
+	/// Class to represent element of a triplet matrix.
+	/// @tparam Container The underlying type of the triplet matrix (The container which holds all triplets)
+	/// @tparam T The type of the value of each triplet element
+	template<typename Container, typename T>
 	class TripletEl {
 
 	template<typename> friend class TripletMatrixConstIterator;
@@ -388,7 +374,7 @@ namespace SMM {
 			return it->first & 0xFFFFFFFF;
 		}
 
-		const real getValue() const noexcept {
+		const T getValue() const noexcept {
 			return it->second;
 		}
 
@@ -401,10 +387,27 @@ namespace SMM {
 		typename Container::const_iterator it;
 	};
 
-	template<typename Container>
-	inline void swap(TripletEl<Container>& a, TripletEl<Container>& b) noexcept {
+	template<typename Container, typename T>
+	inline void swap(TripletEl<Container, T>& a, TripletEl<Container, T>& b) noexcept {
 		using std::swap;
 		swap(a.it, b.it);
+	}
+
+#ifdef SMM_DEBUG_DOUBLE
+	using real = double;
+#else
+	using real = float;
+#endif
+
+	namespace {
+		/// Perform a * x + b, based on compilerd defines this might use actual fused multiply add call
+		const inline real _smm_fma(real a, real x, real b) {
+			#ifdef SMM_WITH_STD_FMA
+				return std::fma(a, x, b);
+			#else
+				return a * x + b;
+			#endif
+		}
 	}
 
 
@@ -415,9 +418,9 @@ namespace SMM {
 
 	public:
 		using iterator_category = std::forward_iterator_tag;
-		using value_type = TripletEl<Container>;
-		using pointer = const TripletEl<Container>*;
-		using reference = const TripletEl<Container>&;
+		using value_type = TripletEl<Container, real>;
+		using pointer = const TripletEl<Container, real>*;
+		using reference = const TripletEl<Container, real>&;
 
 		TripletMatrixConstIterator& operator=(const TripletMatrixConstIterator&) = default;
 
@@ -451,7 +454,7 @@ namespace SMM {
 		template<typename> friend void swap(TripletMatrixConstIterator& a, TripletMatrixConstIterator& b) noexcept;
 	private:
 		TripletMatrixConstIterator(typename Container::const_iterator it) : currentEl(it) {}
-		TripletEl<Container> currentEl;
+		TripletEl<Container, real> currentEl;
 	};
 
 	template<typename Container>
