@@ -408,7 +408,7 @@ namespace SMM {
 	template<typename Container, typename T>
 	class TripletMatrixConstIterator {
 	
-	template<typename> friend class _TripletMatrixCommon;
+	template<typename, typename> friend class _TripletMatrixCommon;
 
 	public:
 		using iterator_category = std::forward_iterator_tag;
@@ -456,12 +456,6 @@ namespace SMM {
 		swap(a.currentEl, b.currentEl);
 	}
 
-#ifdef SMM_DEBUG_DOUBLE
-	using real = double;
-#else
-	using real = float;
-#endif
-
 	/// @brief Class to hold sparse matrix into triplet (coordinate) format.
 	/// Triplet format represents the matrix entries as list of triplets (row, col, value)
 	/// It is allowed repetition of elements, i.e. row and col can be the same for two
@@ -469,10 +463,10 @@ namespace SMM {
 	/// increase the count of non zero elements. This class is supposed to be used as intermediate class to add
 	/// entries dynamically. After all data is gathered it should be converted to CSRMatrix which provides
 	/// various arithmetic functions.
-	template<typename Container>
+	template<typename Container, typename T>
 	class _TripletMatrixCommon {
 	public:
-		using ConstIterator = TripletMatrixConstIterator<Container, real>;
+		using ConstIterator = TripletMatrixConstIterator<Container, T>;
 		_TripletMatrixCommon();
 		/// @brief Initialize triplet matrix with given number of rows and columns
 		/// The number of rows and columns does not have any affect the space allocated by the matrix
@@ -505,14 +499,14 @@ namespace SMM {
 		/// @param row Row of the element
 		/// @param col Column of the element
 		/// @param value The value of the element at (row, col)
-		void addEntry(int row, int col, real value);
+		void addEntry(int row, int col, T value);
 		/// If a non zero entry exists at position (row, col) set its value
 		/// Does nothing if there is no nonzero entry at (row, col)
 		/// @param[in] row The row of the entry which is going to be updated
 		/// @param[in] col The column of the entry which is going to be updated
 		/// @param[in] newValue The new value of the entry at (row, col)
 		/// @returns True if the there is an entry at (row, col) and the update is successful
-		bool updateEntry(const int row, const int col, const real newValue);
+		bool updateEntry(const int row, const int col, const T newValue);
 		/// Retrieve the value of the element at position (row, col)
 		/// IMPORTANT: The getting element is NOT constant operation. Directly getting elements
 		/// must be avoided.
@@ -520,7 +514,7 @@ namespace SMM {
 		/// @param[in] col The column of the element
 		/// @returns The value of the element at position (row, col). Note 0 is possible result, but
 		/// it does not mean that the element at (row, col) is imlicit (not in the sparse structure)
-		real getValue(const int row, const int col) const;
+		T getValue(const int row, const int col) const;
 		/// @brief Get constant iterator to the first element of the triplet list
 		/// @return Constant iterator to the first element of the triplet list
 		ConstIterator begin() const noexcept;
@@ -545,40 +539,40 @@ namespace SMM {
 		int denseColCount; ///< Number of columns in the matrix
 	};
 
-	template<typename Container>
-	inline _TripletMatrixCommon<Container>::_TripletMatrixCommon() :
+	template<typename Container, typename T>
+	inline _TripletMatrixCommon<Container, T>::_TripletMatrixCommon() :
 		denseRowCount(0),
 		denseColCount(0)
 	{ }
 
-	template<typename Container>
-	inline _TripletMatrixCommon<Container>::_TripletMatrixCommon(int denseRowCount, int denseColCount) noexcept :
+	template<typename Container, typename T>
+	inline _TripletMatrixCommon<Container, T>::_TripletMatrixCommon(int denseRowCount, int denseColCount) noexcept :
 		denseRowCount(denseRowCount),
 		denseColCount(denseColCount)
 	{ }
 
-	template<typename Container>
-	inline _TripletMatrixCommon<Container>::_TripletMatrixCommon(int denseRowCount, int denseColCount, int numTriplets) noexcept :
+	template<typename Container, typename T>
+	inline _TripletMatrixCommon<Container, T>::_TripletMatrixCommon(int denseRowCount, int denseColCount, int numTriplets) noexcept :
 		denseRowCount(denseRowCount),
 		denseColCount(denseColCount)
 	{ }
 
-	template<typename Container>
-	inline void _TripletMatrixCommon<Container>::init(const int denseRowCount, const int denseColCount, const int numTriplets) {
+	template<typename Container, typename T>
+	inline void _TripletMatrixCommon<Container, T>::init(const int denseRowCount, const int denseColCount, const int numTriplets) {
 		assert(getNonZeroCount() == 0 && getDenseRowCount() == 0 && getDenseColCount() == 0);
 		this->denseRowCount = denseRowCount;
 		this->denseColCount = denseColCount;
 	}
 
-	template<typename Container>
-	inline void _TripletMatrixCommon<Container>::deinit() {
+	template<typename Container, typename T>
+	inline void _TripletMatrixCommon<Container, T>::deinit() {
 		denseRowCount = 0;
 		denseColCount = 0;
 		data.clear();
 	}
 
-	template<typename Container>
-	inline void _TripletMatrixCommon<Container>::addEntry(int row, int col, real value) {
+	template<typename Container, typename T>
+	inline void _TripletMatrixCommon<Container, T>::addEntry(int row, int col, T value) {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
 		assert(col >= 0 && col < denseColCount);
@@ -591,8 +585,8 @@ namespace SMM {
 		}
 	}
 
-	template<typename Container>
-	inline bool _TripletMatrixCommon<Container>::updateEntry(const int row, const int col, const real newValue) {
+	template<typename Container, typename T>
+	inline bool _TripletMatrixCommon<Container, T>::updateEntry(const int row, const int col, const T newValue) {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
 		assert(col >= 0 && col < denseColCount);
@@ -605,46 +599,55 @@ namespace SMM {
 		return false;
 	}
 
-	template<typename Container>
-	inline real _TripletMatrixCommon<Container>::getValue(const int row, const int col) const {
+	template<typename Container, typename T>
+	inline T _TripletMatrixCommon<Container, T>::getValue(const int row, const int col) const {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
 		assert(col >= 0 && col < denseColCount);
 		const uint64_t key = (uint64_t(row) << 32) | uint64_t(col);
 		auto it = data.find(key);
 		if(it == data.end()) {
-			return real(0);
+			return T(0);
 		}
 		return it->second;
 	}
 
-	template<typename Container>
-	inline typename _TripletMatrixCommon<Container>::ConstIterator _TripletMatrixCommon<Container>::begin() const noexcept {
+	template<typename Container, typename T>
+	inline typename _TripletMatrixCommon<Container, T>::ConstIterator _TripletMatrixCommon<Container, T>::begin() const noexcept {
 		return ConstIterator(data.cbegin());
 	}
 
-	template<typename Container>
-	inline typename _TripletMatrixCommon<Container>::ConstIterator _TripletMatrixCommon<Container>::end() const noexcept {
+	template<typename Container, typename T>
+	inline typename _TripletMatrixCommon<Container, T>::ConstIterator _TripletMatrixCommon<Container, T>::end() const noexcept {
 		return ConstIterator(data.cend());
 	}
 
-	template<typename Container>
-	inline int _TripletMatrixCommon<Container>::getNonZeroCount() const noexcept {
+	template<typename Container, typename T>
+	inline int _TripletMatrixCommon<Container, T>::getNonZeroCount() const noexcept {
 		return data.size();
 	}
 
-	template<typename Container>
-	inline int _TripletMatrixCommon<Container>::getDenseRowCount() const noexcept {
+	template<typename Container, typename T>
+	inline int _TripletMatrixCommon<Container, T>::getDenseRowCount() const noexcept {
 		return denseRowCount;
 	}
 
-	template<typename Container>
-	inline int _TripletMatrixCommon<Container>::getDenseColCount() const noexcept {
+	template<typename Container, typename T>
+	inline int _TripletMatrixCommon<Container, T>::getDenseColCount() const noexcept {
 		return denseColCount;
 	}
 
-	using TripletMatrix = _TripletMatrixCommon<std::map<uint64_t, real>>;
-	using UnorderedTripletMatrix = _TripletMatrixCommon<std::unordered_map<uint64_t, real>>;
+#ifdef SMM_DEBUG_DOUBLE
+	using real = double;
+#else
+	using real = float;
+#endif
+
+	template<typename T>
+	using TripletMatrix = _TripletMatrixCommon<std::map<uint64_t, T>, T>;
+
+	template<typename T>
+	using UnorderedTripletMatrix = _TripletMatrixCommon<std::unordered_map<uint64_t, T>, T>;
 
 	enum CSFormat {
 		CSR, ///< (C)ompressed (S)parse (R)ow
@@ -980,7 +983,7 @@ namespace SMM {
 		friend class _CSRIteratorBase<CSRMatrix*>;
 
 		CSRMatrix() noexcept;
-		CSRMatrix(const TripletMatrix& triplet) noexcept;
+		CSRMatrix(const TripletMatrix<real>& triplet) noexcept;
 
 		CSRMatrix(const CSRMatrix&) = delete;
 		CSRMatrix& operator=(const CSRMatrix&) = delete;
@@ -990,7 +993,7 @@ namespace SMM {
 
 		~CSRMatrix() = default;
 
-		int init(const TripletMatrix& triplet) noexcept;
+		int init(const TripletMatrix<real>& triplet) noexcept;
 		/// @brief Get the number of trivial nonzero entries in the matrix
 		/// Trivial nonzero entries do not include zero elements which came from numerical cancellation
 		/// @return The number of trivial nonzero entries in the matrix
@@ -1244,7 +1247,7 @@ namespace SMM {
 		/// Index in start array. The first row which has nonzero element in it.
 		int firstActiveStart;
 		/// Fill start, positions and values array. The arrays must be allocated with the right sizes before this is called.
-		const int fillArrays(const TripletMatrix& triplet) noexcept;
+		const int fillArrays(const TripletMatrix<real>& triplet) noexcept;
 		/// Get the next row which has at least one element in it
 		/// @param[in] currentStartIndex The current row
 		/// @param[in] startLength The length of the start array (same as the number of rows)
@@ -1316,7 +1319,7 @@ namespace SMM {
 		firstActiveStart(-1)
 	{ }
 
-	inline CSRMatrix::CSRMatrix(const TripletMatrix& triplet) noexcept :
+	inline CSRMatrix::CSRMatrix(const TripletMatrix<real>& triplet) noexcept :
 		values(new real[triplet.getNonZeroCount()]),
 		positions(new int[triplet.getNonZeroCount()]),
 		start(new int[triplet.getDenseRowCount() + 1]),
@@ -1327,7 +1330,7 @@ namespace SMM {
 		fillArrays(triplet);
 	}
 
-	inline int CSRMatrix::init(const TripletMatrix& triplet) noexcept {
+	inline int CSRMatrix::init(const TripletMatrix<real>& triplet) noexcept {
 		denseRowCount = triplet.getDenseRowCount();
 		denseColCount = triplet.getDenseColCount();
 		const int nnz = triplet.getNonZeroCount();
@@ -1651,7 +1654,7 @@ namespace SMM {
 		return 1;
 	}
 
-	inline const int CSRMatrix::fillArrays(const TripletMatrix& triplet) noexcept {
+	inline const int CSRMatrix::fillArrays(const TripletMatrix<real>& triplet) noexcept {
 		const int n = getDenseRowCount();
 		std::unique_ptr<int[], decltype(&free)> count(static_cast<int*>(calloc(n, sizeof(int))), &free);
 		if (count == nullptr) {
@@ -2514,7 +2517,8 @@ namespace SMM {
 	/// @param filename Path to the file with the matrix
 	/// @param out Matrix in triplet (coordinate) for containing the data from the file
 	/// @return MatrixLoadStatus Error code for the function
-	inline MatrixLoadStatus loadMatrixMarketMatrix(const char* filepath, TripletMatrix& out) {
+	template<typename T>
+	inline MatrixLoadStatus loadMatrixMarketMatrix(const char* filepath, TripletMatrix<T>& out) {
 		std::ifstream file(filepath);
 		if (!file.is_open()) {
 			return MatrixLoadStatus::FAILED_TO_OPEN_FILE;
@@ -2593,7 +2597,8 @@ namespace SMM {
 		return MatrixLoadStatus::SUCCESS;
 	}
 
-	inline MatrixLoadStatus loadSMMDTMatrix(const char* filepath, TripletMatrix& out) {
+	template<typename T>
+	inline MatrixLoadStatus loadSMMDTMatrix(const char* filepath, TripletMatrix<T>& out) {
 		std::ifstream file(filepath);
 		if (!file.is_open()) {
 			return MatrixLoadStatus::FAILED_TO_OPEN_FILE;
@@ -2629,7 +2634,8 @@ namespace SMM {
 		return MatrixLoadStatus::SUCCESS;
 	}
 
-	inline MatrixLoadStatus loadMatrix(const char* filepath, TripletMatrix& out) {
+	template<typename T>
+	inline MatrixLoadStatus loadMatrix(const char* filepath, TripletMatrix<T>& out) {
 		const char* fileExtension = strrchr(filepath, '.') + 1;
 		if (strcmp(fileExtension, "mtx") == 0) {
 			return loadMatrixMarketMatrix(filepath, out);
