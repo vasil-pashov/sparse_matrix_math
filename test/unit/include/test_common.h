@@ -1,10 +1,12 @@
 #pragma once
 #include "sparse_matrix_math.h"
 
-static constexpr inline SMM::real L2Epsilon() {
-	return SMM::real(1e-6);
+template<typename T>
+static constexpr inline T L2Epsilon() {
+	return T(1e-8);
 }
 
-static constexpr inline SMM::real MaxInfEpsilon() {
-	return SMM::real(1e-4);
+template<typename T>
+static constexpr inline T MaxInfEpsilon() {
+	return T(1e-4);
 }

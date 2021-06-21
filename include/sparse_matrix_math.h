@@ -25,16 +25,10 @@
 #define SMM_PATCH_VERSION 0
 
 namespace SMM {
-
-#ifdef SMM_DEBUG_DOUBLE
-	using real = double;
-#else
-	using real = float;
-#endif
-
 	namespace {
 		/// Perform a * x + b, based on compilerd defines this might use actual fused multiply add call
-		const inline real _smm_fma(real a, real x, real b) {
+		template<typename T>
+		const inline T _smm_fma(T a, T x, T b) {
 			#ifdef SMM_WITH_STD_FMA
 				return std::fma(a, x, b);
 			#else
@@ -43,172 +37,335 @@ namespace SMM {
 		}
 	}
 
+	template<typename T>
 	class Vector {
 	public:
-		Vector() noexcept :
-			size(0),
-			data(nullptr)
-		{ }
 
-		explicit Vector(const int size) noexcept :
-			size(size),
-			data(static_cast<real*>(malloc(size * sizeof(real))))
-		{ }
+		using Iterator = T*;
+		using ConstIterator = const T*;
 
-		Vector(const int size, const real val) noexcept :
-			size(size)
-		{
-			initDataWithVal(val);
-		}
+		/// Default construct a vector. Sets the size to 0.
+		Vector() noexcept;
 
-		Vector(const std::initializer_list<real>& l) :
-			size(l.size()),
-			data(static_cast<real*>(malloc(l.size() * sizeof(real))))
-		{
-			std::copy(l.begin(), l.end(), data);
-		}
+		/// Construct a vector with a given size. The values will be junk, the user must init them
+		/// @param[in] size The size of the vector.
+		explicit Vector(const int size) noexcept;
 
-		Vector(Vector&& other) noexcept :
-			size(other.size) {
-			free(data);
-			data = other.data;
-			other.data = nullptr;
-			other.size = 0;
-		}
+		/// Construct a vector of given size and set all values to the specified value
+		/// @param[in] size The size of the vector
+		/// @param[in] val The the value which all elements of the vectori will take
+		Vector(const int size, const T val) noexcept;
 
-		Vector& operator=(Vector&& other) noexcept {
-			size = other.size;
-			free(data);
-			data = other.data;
-			other.data = nullptr;
-			other.size = 0;
-			return *this;
-		}
+		/// Construct a vector from initializer list. The vector will have size as the initializer
+		/// and all elements will be copied
+		/// @param[in] l The initializer list
+		Vector(const std::initializer_list<T>& l) noexcept;
 
-		Vector(const Vector&) = delete;
-		Vector& operator=(const Vector&) = delete;
+		/// Move construct from another vector
+		Vector(Vector<T>&& other) noexcept;
 
-		~Vector() {
-			free(data);
-			data = nullptr;
-			size = 0;
-		}
+		/// Move assignment from another vector
+		Vector<T>& operator=(Vector<T>&& other) noexcept;
 
-		void init(const int size) {
-			if(this->size != size) {
-				free(data);
-				this->size = size;
-				data = static_cast<real*>(malloc(size * sizeof(real)));
-			}
-		}
+		Vector(const Vector<T>&) = delete;
+		Vector<T>& operator=(const Vector<T>&) = delete;
 
-		void init(const int size, const real val) {
-			if(this->size != size) {
-				this->size = size;
-				free(data);
-				initDataWithVal(val);
-			} else {
-				fill(val);
-			}
-		}
+		~Vector();
 
-		const int getSize() const {
-			return this->size;
-		}
+		/// Initialize the vector. It is safe to call init two (or more times). If the size of the
+		/// vector is larger of than the new size there will be no allocation or deallocation of memory,
+		/// only the size field will be changed. If the size of the vector is less than the new size
+		/// the data will be resized accordingly.
+		/// @param[in] size The number of elements the vector should have
+		void init(const int size);
 
-		operator real* const() {
-			return data;
-		}
+		/// Initialize the vector and set all elements with the passed value. It is safe to call init two (or more times).
+		/// If the size of the vector is larger of than the new size there will be no allocation or deallocation of memory,
+		/// only the size field will be changed. If the size of the vector is less than the new size
+		/// the data will be resized accordingly.
+		/// @param[in] size The number of elements the vector should have
+		/// @param[in] val The value which all elements will take
+		void init(const int size, const T val);
 
-		const real operator[](const int index) const {
-			assert(index < size);
-			return data[index];
-		}
+		/// Delete the data allocated by the vector
+		void deinit() noexcept;
 
-		real& operator[](const int index) {
-			assert(index < size);
-			return data[index];
-		}
+		/// @returns The number of elements in the vector
+		const int getSize() const;
 
-		Vector& operator+=(const Vector& other) {
-			assert(other.size == size);
-			for (int i = 0; i < size; ++i) {
-				data[i] += other[i];
-			}
-			return *this;
-		}
+		/// Cast the vector to a pointer of the underlying type
+		operator T*();
 
-		Vector& operator-=(const Vector& other) {
-			assert(other.size == size);
-			for (int i = 0; i < size; ++i) {
-				data[i] -= other[i];
-			}
-			return *this;
-		}
+		/// Returns a const reference to the element at specified location pos. No bounds checking is performed.
+		/// @param[in] index Position of the element to return
+		/// @returns Const reference to the requested element.
+		const T& operator[](const int index) const;
 
-		const real secondNorm() const {
-			real sum = 0.0f;
-			for (int i = 0; i < size; ++i) {
-				sum += data[i] * data[i];
-			}
-			return std::sqrt(sum);
-		}
+		/// Returns a reference to the element at specified location pos. No bounds checking is performed.
+		/// @param[in] index Position of the element to return
+		/// @returns Reference to the requested element.
+		T& operator[](const int index);
 
-		const real secondNormSquared() const {
-			real sum(0);
-			for (int i = 0; i < size; ++i) {
-				sum += data[i] * data[i];
-			}
-			return sum;
-		}
+		/// Inplace addition of two vectors. The two vectors must be of the same size (no checks are performed however)
+		/// @param[in] other The vector which will be added to the current one
+		/// @returns Reference to this which will contain this + other
+		Vector<T>& operator+=(const Vector<T>& other);
 
-		const real operator*(const Vector& other) const {
-			assert(other.size == size);
-			real dot(0);
-			for (int i = 0; i < size; ++i) {
-				dot += other[i] * data[i];
-			}
-			return dot;
-		}
+		/// Inplace subtraction of two vectors. The two vectors must be of the same size (no checks are performed however)
+		/// @param[in] other The vector which will be subtracted from the current one
+		/// @returns Reference to this which will contain this - other
+		Vector<T>& operator-=(const Vector<T>& other);
 
-		real* const begin() noexcept {
-			return data;
-		}
+		/// Compute the L2 (Euclidian) norm of the vector
+		/// @returns L2 norm of the vector
+		T secondNorm() const;
 
-		real* const end() noexcept {
-			return data + size;
-		}
+		/// Compute the L2 (Euclidian) norm of the vector squared.
+		/// @returns L2 norm of the vector squared.
+		T secondNormSquared() const;
 
-		void fill(const real value) {
-			if(value == 0.0f) {
-				memset(data, 0, sizeof(real) * size);
-			} else {
-				std::fill_n(data, size, value);
-			}
-		}
+		/// Compute the dot product of two vectors
+		/// @param[in] other The vector which will be dotted with this
+		/// @returns The dot product of this and other
+		const T operator*(const Vector<T>& other) const;
+
+		/// Iterator to the beggining of the vector
+		/// @returns Iterator to the beggining of the vector
+		Iterator begin() noexcept;
+
+		/// Iterator to one past the last element. Should not be dereferenced.
+		/// @returns Iterator to the end of the vector.
+		Iterator end() noexcept;
+
+		/// Constant iterator to the beggining of the vector
+		/// @returns Constant iterator to the beggining of the vector
+		ConstIterator begin() const noexcept;
+
+		/// Constant terator to one past the last element. Should not be dereferenced.
+		/// @returns Constant iterator to the end of the vector.
+		ConstIterator end() const noexcept;
+
+		/// Constant iterator to the beggining of the vector
+		/// @returns Constant iterator to the beggining of the vector
+		ConstIterator cbegin() const noexcept;
+
+		/// Constant terator to one past the last element. Should not be dereferenced.
+		/// @returns Constant iterator to the end of the vector.
+		ConstIterator cend() const noexcept;
+
+		/// Fill all elements of the vector with the current value
+		/// @param[in] value The to which all elements will be set
+		void fill(const T value);
 
 	private:
-		void initDataWithVal(const real val) {
-			if (val == 0.0f) {
-				data = static_cast<real*>(calloc(size, sizeof(real)));
-			} else {
-				const int64_t byteSize = int64_t(size) * sizeof(real);
-				data = static_cast<real*>(malloc(byteSize));
-				if (!data) return;
-				for (int i = 0; i < this->size; ++i) {
-					data[i] = val;
-				}
-			}
-		}
-		real* data;
+		/// Allocate new memory for the vector and set all elements to val
+		void initDataWithVal(const T val);
+		T* data;
 		int size;
 	};
 
 
-	template<typename Container>
+	template<typename T>
+	inline Vector<T>::Vector() noexcept :
+		size(0),
+		data(nullptr)
+	{ }
+
+	template<typename T>
+	inline Vector<T>::Vector(const int size) noexcept :
+		size(size),
+		data(static_cast<T*>(malloc(size * sizeof(T))))
+	{ }
+
+	template<typename T>
+	inline Vector<T>::Vector(const int size, const T val) noexcept :
+		size(size)
+	{
+		initDataWithVal(val);
+	}
+
+	template<typename T>
+	inline Vector<T>::Vector(const std::initializer_list<T>& l) noexcept :
+		size(l.size()),
+		data(static_cast<T*>(malloc(l.size() * sizeof(T))))
+	{
+		std::copy(l.begin(), l.end(), data);
+	}
+
+	template<typename T>
+	inline Vector<T>::Vector(Vector<T>&& other) noexcept :
+		size(other.size) {
+		free(data);
+		data = other.data;
+		other.data = nullptr;
+		other.size = 0;
+	}
+
+	template<typename T>
+	inline Vector<T>& Vector<T>::operator=(Vector<T>&& other) noexcept {
+		size = other.size;
+		free(data);
+		data = other.data;
+		other.data = nullptr;
+		other.size = 0;
+		return *this;
+	}
+
+	template<typename T>
+	inline Vector<T>::~Vector() {
+		deinit();
+	}
+
+	template<typename T>
+	inline void Vector<T>::init(const int size) {
+		if(this->size < size) {
+			data = static_cast<T*>(realloc(data, size * sizeof(T)));
+			assert(data != nullptr);
+		}
+		this->size = size;
+	}
+
+	template<typename T>
+	inline void Vector<T>::init(const int size, const T val) {
+		init(size);
+		fill(val);
+	}
+
+	template<typename T>
+	inline void Vector<T>::deinit() noexcept {
+		free(data);
+		data = nullptr;
+		size = 0;
+	}
+
+	template<typename T>
+	inline const int Vector<T>::getSize() const {
+		return this->size;
+	}
+
+	template<typename T>
+	inline Vector<T>::operator T*() {
+		return data;
+	}
+
+	template<typename T>
+	inline const T& Vector<T>::operator[](const int index) const {
+		assert(index < size && index >= 0);
+		return data[index];
+	}
+
+	template<typename T>
+	inline T& Vector<T>::operator[](const int index) {
+		assert(index < size && index >= 0);
+		return data[index];
+	}
+
+	template<typename T>
+	inline Vector<T>& Vector<T>::operator+=(const Vector<T>& other) {
+		assert(other.size == size);
+		for (int i = 0; i < size; ++i) {
+			data[i] += other[i];
+		}
+		return *this;
+	}
+
+	template<typename T>
+	inline Vector<T>& Vector<T>::operator-=(const Vector<T>& other) {
+		assert(other.size == size);
+		for (int i = 0; i < size; ++i) {
+			data[i] -= other[i];
+		}
+		return *this;
+	}
+
+	template<typename T>
+	inline T Vector<T>::secondNorm() const {
+		T sum = 0.0;
+		for (int i = 0; i < size; ++i) {
+			sum += data[i] * data[i];
+		}
+		return std::sqrt(sum);
+	}
+
+	template<typename T>
+	inline T Vector<T>::secondNormSquared() const {
+		T sum(0);
+		for (int i = 0; i < size; ++i) {
+			sum += data[i] * data[i];
+		}
+		return sum;
+	}
+
+	template<typename T>
+	inline const T Vector<T>::operator*(const Vector<T>& other) const {
+		assert(other.size == size);
+		T dot(0);
+		for (int i = 0; i < size; ++i) {
+			dot += other[i] * data[i];
+		}
+		return dot;
+	}
+
+	template<typename T>
+	inline typename Vector<T>::Iterator Vector<T>::begin() noexcept {
+		return data;
+	}
+
+	template<typename T>
+	inline typename Vector<T>::Iterator Vector<T>::end() noexcept {
+		return data + size;
+	}
+
+	template<typename T>
+	inline typename Vector<T>::ConstIterator Vector<T>::begin() const noexcept {
+		return data;
+	}
+
+	template<typename T>
+	inline typename Vector<T>::ConstIterator Vector<T>::end() const noexcept {
+		return data + size;
+	}
+
+	template<typename T>
+	inline typename Vector<T>::ConstIterator Vector<T>::cbegin() const noexcept {
+		return data;
+	}
+
+	template<typename T>
+	inline typename Vector<T>::ConstIterator Vector<T>::cend() const noexcept {
+		return data + size;
+	}
+
+	template<typename T>
+	inline void Vector<T>::fill(const T value) {
+		if(value == T(0)) {
+			memset(data, 0, sizeof(T) * size);
+		} else {
+			std::fill_n(data, size, value);
+		}
+	}
+
+	template<typename T>
+	inline void Vector<T>::initDataWithVal(const T val) {
+		if (val == T(0)) {
+			data = static_cast<T*>(calloc(size, sizeof(T)));
+		} else {
+			const int64_t byteSize = int64_t(size) * sizeof(T);
+			data = static_cast<T*>(malloc(byteSize));
+			if (!data) return;
+			for (int i = 0; i < this->size; ++i) {
+				data[i] = val;
+			}
+		}
+	}
+
+	/// Class to represent element of a triplet matrix.
+	/// @tparam Container The underlying type of the triplet matrix (The container which holds all triplets)
+	/// @tparam T The type of the value of each triplet element
+	template<typename Container, typename T>
 	class TripletEl {
 
-	template<typename> friend class TripletMatrixConstIterator;
+	template<typename,typename> friend class TripletMatrixConstIterator;
 
 	public:
 		TripletEl(const TripletEl&) noexcept = default;
@@ -229,7 +386,7 @@ namespace SMM {
 			return it->first & 0xFFFFFFFF;
 		}
 
-		const real getValue() const noexcept {
+		const T getValue() const noexcept {
 			return it->second;
 		}
 
@@ -242,23 +399,22 @@ namespace SMM {
 		typename Container::const_iterator it;
 	};
 
-	template<typename Container>
-	inline void swap(TripletEl<Container>& a, TripletEl<Container>& b) noexcept {
+	template<typename Container, typename T>
+	inline void swap(TripletEl<Container, T>& a, TripletEl<Container, T>& b) noexcept {
 		using std::swap;
 		swap(a.it, b.it);
 	}
 
-
-	template<typename Container>
+	template<typename Container, typename T>
 	class TripletMatrixConstIterator {
 	
-	template<typename> friend class _TripletMatrixCommon;
+	template<typename, typename> friend class _TripletMatrixCommon;
 
 	public:
 		using iterator_category = std::forward_iterator_tag;
-		using value_type = TripletEl<Container>;
-		using pointer = const TripletEl<Container>*;
-		using reference = const TripletEl<Container>&;
+		using value_type = TripletEl<Container, T>;
+		using pointer = const TripletEl<Container, T>*;
+		using reference = const TripletEl<Container, T>&;
 
 		TripletMatrixConstIterator& operator=(const TripletMatrixConstIterator&) = default;
 
@@ -292,11 +448,11 @@ namespace SMM {
 		template<typename> friend void swap(TripletMatrixConstIterator& a, TripletMatrixConstIterator& b) noexcept;
 	private:
 		TripletMatrixConstIterator(typename Container::const_iterator it) : currentEl(it) {}
-		TripletEl<Container> currentEl;
+		TripletEl<Container, T> currentEl;
 	};
 
-	template<typename Container>
-	inline void swap(TripletMatrixConstIterator<Container>& a, TripletMatrixConstIterator<Container>& b) noexcept {
+	template<typename Container, typename T>
+	inline void swap(TripletMatrixConstIterator<Container, T>& a, TripletMatrixConstIterator<Container, T>& b) noexcept {
 		swap(a.currentEl, b.currentEl);
 	}
 
@@ -307,10 +463,11 @@ namespace SMM {
 	/// increase the count of non zero elements. This class is supposed to be used as intermediate class to add
 	/// entries dynamically. After all data is gathered it should be converted to CSRMatrix which provides
 	/// various arithmetic functions.
-	template<typename Container>
+	template<typename Container, typename T>
 	class _TripletMatrixCommon {
 	public:
-		using ConstIterator = TripletMatrixConstIterator<Container>;
+		using value_type = T;
+		using ConstIterator = TripletMatrixConstIterator<Container, T>;
 		_TripletMatrixCommon();
 		/// @brief Initialize triplet matrix with given number of rows and columns
 		/// The number of rows and columns does not have any affect the space allocated by the matrix
@@ -343,14 +500,14 @@ namespace SMM {
 		/// @param row Row of the element
 		/// @param col Column of the element
 		/// @param value The value of the element at (row, col)
-		void addEntry(int row, int col, real value);
+		void addEntry(int row, int col, T value);
 		/// If a non zero entry exists at position (row, col) set its value
 		/// Does nothing if there is no nonzero entry at (row, col)
 		/// @param[in] row The row of the entry which is going to be updated
 		/// @param[in] col The column of the entry which is going to be updated
 		/// @param[in] newValue The new value of the entry at (row, col)
 		/// @returns True if the there is an entry at (row, col) and the update is successful
-		bool updateEntry(const int row, const int col, const real newValue);
+		bool updateEntry(const int row, const int col, const T newValue);
 		/// Retrieve the value of the element at position (row, col)
 		/// IMPORTANT: The getting element is NOT constant operation. Directly getting elements
 		/// must be avoided.
@@ -358,7 +515,7 @@ namespace SMM {
 		/// @param[in] col The column of the element
 		/// @returns The value of the element at position (row, col). Note 0 is possible result, but
 		/// it does not mean that the element at (row, col) is imlicit (not in the sparse structure)
-		real getValue(const int row, const int col) const;
+		T getValue(const int row, const int col) const;
 		/// @brief Get constant iterator to the first element of the triplet list
 		/// @return Constant iterator to the first element of the triplet list
 		ConstIterator begin() const noexcept;
@@ -383,40 +540,40 @@ namespace SMM {
 		int denseColCount; ///< Number of columns in the matrix
 	};
 
-	template<typename Container>
-	inline _TripletMatrixCommon<Container>::_TripletMatrixCommon() :
+	template<typename Container, typename T>
+	inline _TripletMatrixCommon<Container, T>::_TripletMatrixCommon() :
 		denseRowCount(0),
 		denseColCount(0)
 	{ }
 
-	template<typename Container>
-	inline _TripletMatrixCommon<Container>::_TripletMatrixCommon(int denseRowCount, int denseColCount) noexcept :
+	template<typename Container, typename T>
+	inline _TripletMatrixCommon<Container, T>::_TripletMatrixCommon(int denseRowCount, int denseColCount) noexcept :
 		denseRowCount(denseRowCount),
 		denseColCount(denseColCount)
 	{ }
 
-	template<typename Container>
-	inline _TripletMatrixCommon<Container>::_TripletMatrixCommon(int denseRowCount, int denseColCount, int numTriplets) noexcept :
+	template<typename Container, typename T>
+	inline _TripletMatrixCommon<Container, T>::_TripletMatrixCommon(int denseRowCount, int denseColCount, int numTriplets) noexcept :
 		denseRowCount(denseRowCount),
 		denseColCount(denseColCount)
 	{ }
 
-	template<typename Container>
-	inline void _TripletMatrixCommon<Container>::init(const int denseRowCount, const int denseColCount, const int numTriplets) {
+	template<typename Container, typename T>
+	inline void _TripletMatrixCommon<Container, T>::init(const int denseRowCount, const int denseColCount, const int numTriplets) {
 		assert(getNonZeroCount() == 0 && getDenseRowCount() == 0 && getDenseColCount() == 0);
 		this->denseRowCount = denseRowCount;
 		this->denseColCount = denseColCount;
 	}
 
-	template<typename Container>
-	inline void _TripletMatrixCommon<Container>::deinit() {
+	template<typename Container, typename T>
+	inline void _TripletMatrixCommon<Container, T>::deinit() {
 		denseRowCount = 0;
 		denseColCount = 0;
 		data.clear();
 	}
 
-	template<typename Container>
-	inline void _TripletMatrixCommon<Container>::addEntry(int row, int col, real value) {
+	template<typename Container, typename T>
+	inline void _TripletMatrixCommon<Container, T>::addEntry(int row, int col, T value) {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
 		assert(col >= 0 && col < denseColCount);
@@ -429,8 +586,8 @@ namespace SMM {
 		}
 	}
 
-	template<typename Container>
-	inline bool _TripletMatrixCommon<Container>::updateEntry(const int row, const int col, const real newValue) {
+	template<typename Container, typename T>
+	inline bool _TripletMatrixCommon<Container, T>::updateEntry(const int row, const int col, const T newValue) {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
 		assert(col >= 0 && col < denseColCount);
@@ -443,46 +600,49 @@ namespace SMM {
 		return false;
 	}
 
-	template<typename Container>
-	inline real _TripletMatrixCommon<Container>::getValue(const int row, const int col) const {
+	template<typename Container, typename T>
+	inline T _TripletMatrixCommon<Container, T>::getValue(const int row, const int col) const {
 		static_assert(2 * sizeof(int) == sizeof(uint64_t), "Expected 32 bit integers");
 		assert(row >= 0 && row < denseRowCount);
 		assert(col >= 0 && col < denseColCount);
 		const uint64_t key = (uint64_t(row) << 32) | uint64_t(col);
 		auto it = data.find(key);
 		if(it == data.end()) {
-			return real(0);
+			return T(0);
 		}
 		return it->second;
 	}
 
-	template<typename Container>
-	inline typename _TripletMatrixCommon<Container>::ConstIterator _TripletMatrixCommon<Container>::begin() const noexcept {
+	template<typename Container, typename T>
+	inline typename _TripletMatrixCommon<Container, T>::ConstIterator _TripletMatrixCommon<Container, T>::begin() const noexcept {
 		return ConstIterator(data.cbegin());
 	}
 
-	template<typename Container>
-	inline typename _TripletMatrixCommon<Container>::ConstIterator _TripletMatrixCommon<Container>::end() const noexcept {
+	template<typename Container, typename T>
+	inline typename _TripletMatrixCommon<Container, T>::ConstIterator _TripletMatrixCommon<Container, T>::end() const noexcept {
 		return ConstIterator(data.cend());
 	}
 
-	template<typename Container>
-	inline int _TripletMatrixCommon<Container>::getNonZeroCount() const noexcept {
+	template<typename Container, typename T>
+	inline int _TripletMatrixCommon<Container, T>::getNonZeroCount() const noexcept {
 		return data.size();
 	}
 
-	template<typename Container>
-	inline int _TripletMatrixCommon<Container>::getDenseRowCount() const noexcept {
+	template<typename Container, typename T>
+	inline int _TripletMatrixCommon<Container, T>::getDenseRowCount() const noexcept {
 		return denseRowCount;
 	}
 
-	template<typename Container>
-	inline int _TripletMatrixCommon<Container>::getDenseColCount() const noexcept {
+	template<typename Container, typename T>
+	inline int _TripletMatrixCommon<Container, T>::getDenseColCount() const noexcept {
 		return denseColCount;
 	}
 
-	using TripletMatrix = _TripletMatrixCommon<std::map<uint64_t, real>>;
-	using UnorderedTripletMatrix = _TripletMatrixCommon<std::unordered_map<uint64_t, real>>;
+	template<typename T>
+	using TripletMatrix = _TripletMatrixCommon<std::map<uint64_t, T>, T>;
+
+	template<typename T>
+	using UnorderedTripletMatrix = _TripletMatrixCommon<std::unordered_map<uint64_t, T>, T>;
 
 	enum CSFormat {
 		CSR, ///< (C)ompressed (S)parse (R)ow
@@ -512,16 +672,16 @@ namespace SMM {
 	template<typename MatrixPtrT>
 	class _CSRIteratorBase {
 	public:
-
+		using el_value_type = typename std::remove_pointer_t<MatrixPtrT>::value_type;
 		friend class _CSRIteratorBase<make_ptr_to_const_t<MatrixPtrT>>;
 		class CSRElement {
 		public:
 			friend class _CSRIteratorBase<MatrixPtrT>;
 			friend class _CSRIteratorBase<make_ptr_to_const_t<MatrixPtrT>>;
-			const real getValue() const noexcept;
+			const el_value_type getValue() const noexcept;
 			const int getRow() const noexcept;
 			const int getCol() const noexcept;
-			void setValue(real value) noexcept;
+			void setValue(el_value_type value) noexcept;
 			friend void swap(CSRElement& a, CSRElement& b) noexcept;
 			CSRElement(
 				MatrixPtrT m,
@@ -646,12 +806,12 @@ namespace SMM {
 	}
 
 	template<typename MatrixPtrT>
-	inline const real _CSRIteratorBase<MatrixPtrT>::CSRElement::getValue() const noexcept {
+	inline const typename _CSRIteratorBase<MatrixPtrT>::el_value_type _CSRIteratorBase<MatrixPtrT>::CSRElement::getValue() const noexcept {
 		return m->values[currentPositionIndex];
 	}
 
 	template<typename MatrixPtrT>
-	inline void _CSRIteratorBase<MatrixPtrT>::CSRElement::setValue(const real value) noexcept {
+	inline void _CSRIteratorBase<MatrixPtrT>::CSRElement::setValue(const typename _CSRIteratorBase<MatrixPtrT>::el_value_type value) noexcept {
 		m->values[currentPositionIndex] = value;
 	}
 
@@ -806,19 +966,22 @@ namespace SMM {
 	/// @brief Base class for matrix in compressed sparse row format
 	/// Compressed sparse row format is represented with 3 arrays. One for the values,
 	/// one to keep track nonzero columns for each row, one to keep track where each row
+	template<typename T>
 	class CSRMatrix {
 	public:
-		using Iterator = CSRIterator<CSRMatrix*>;
-		using ConstIterator = CSRIterator<const CSRMatrix*>;
+		using Iterator = CSRIterator<CSRMatrix<T>*>;
+		using ConstIterator = CSRIterator<const CSRMatrix<T>*>;
 
-		using RowIterator = CSRRowIterator<CSRMatrix*>;
-		using ConstRowIterator = CSRRowIterator<const CSRMatrix*>;
+		using RowIterator = CSRRowIterator<CSRMatrix<T>*>;
+		using ConstRowIterator = CSRRowIterator<const CSRMatrix<T>*>;
 
-		friend class _CSRIteratorBase<const CSRMatrix*>;
-		friend class _CSRIteratorBase<CSRMatrix*>;
+		using value_type = T;
+
+		friend class _CSRIteratorBase<const CSRMatrix<T>*>;
+		friend class _CSRIteratorBase<CSRMatrix<T>*>;
 
 		CSRMatrix() noexcept;
-		CSRMatrix(const TripletMatrix& triplet) noexcept;
+		CSRMatrix(const TripletMatrix<T>& triplet) noexcept;
 
 		CSRMatrix(const CSRMatrix&) = delete;
 		CSRMatrix& operator=(const CSRMatrix&) = delete;
@@ -828,7 +991,7 @@ namespace SMM {
 
 		~CSRMatrix() = default;
 
-		int init(const TripletMatrix& triplet) noexcept;
+		int init(const TripletMatrix<T>& triplet) noexcept;
 		/// @brief Get the number of trivial nonzero entries in the matrix
 		/// Trivial nonzero entries do not include zero elements which came from numerical cancellation
 		/// @return The number of trivial nonzero entries in the matrix
@@ -902,7 +1065,7 @@ namespace SMM {
 		/// Where A is the current CSR matrix
 		/// @param[in] mult The vector which will multiply the matrix to the right
 		/// @param[out] out Preallocated vector where the result is stored
-		void rMult(const real* const mult, real* const out) const noexcept;
+		void rMult(const T* const mult, T* const out) const noexcept;
 		/// @brief Perform matrix vector multiplication and addition: out = lhs + A * mult
 		/// Where A is the current CSR matrix
 		/// @param[in] lhs The vector which will be added to the matrix vector product A * mult
@@ -910,7 +1073,7 @@ namespace SMM {
 		/// @param[out] out Preallocated vector where the result is stored
 		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
 		///< Makes sense only of multithreading is enabaled.
-		void rMultAdd(const real* const lhs, const real* const mult, real* const out) const noexcept;
+		void rMultAdd(const T* const lhs, const T* const mult, T* const out) const noexcept;
 		/// @brief Perform matrix vector multiplication and subtraction: out = lhs - A * mult
 		/// Where A is the current CSR matrix
 		/// @param[in] lhs The vector from which the matrix vector product A * mult will be subtracted
@@ -918,17 +1081,17 @@ namespace SMM {
 		/// @param[out] out Preallocated vector where the result is stored
 		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
 		///< Makes sense only of multithreading is enabaled.
-		void rMultSub(const real* const lhs, const real* const mult, real* const out) const noexcept;
+		void rMultSub(const T* const lhs, const T* const mult, T* const out) const noexcept;
 
 		/// Inplace multiplication by a scalar
 		/// @param[in] scalar The scalar which will multiply the matrix
-		void operator*=(const real scalar);
+		void operator*=(const T scalar);
 		/// Inplace addition of two CSR matrices.
 		/// @param[in] other The matrix which will be added to the current one
-		void inplaceAdd(const CSRMatrix& other);
+		void inplaceAdd(const CSRMatrix<T>& other);
 		/// Inplace subtraction of two CSR matrices.
 		/// @param[in] other The matrix which will be subtracted from the current one
-		void inplaceSubtract(const CSRMatrix& other);
+		void inplaceSubtract(const CSRMatrix<T>& other);
 
 		/// If a non zero entry exists at position (row, col) set its value
 		/// Does nothing if there is no nonzero entry at (row, col)
@@ -936,7 +1099,7 @@ namespace SMM {
 		/// @param[in] col The column of the entry which is going to be updated
 		/// @param[in] newValue The new value of the entry at (row, col)
 		/// @returns True if the there is an entry at (row, col) and the update is successful
-		bool updateEntry(const int row, const int col, const real newValue);
+		bool updateEntry(const int row, const int col, const T newValue);
 		/// Retrieve the value of the element at position (row, col)
 		/// IMPORTANT: The getting element is NOT constant operation. Getting elements directly
 		/// must be avoided.
@@ -944,14 +1107,14 @@ namespace SMM {
 		/// @param[in] col The column of the element
 		/// @returns The value of the element at position (row, col). Note 0 is possible result, but
 		/// it does not mean that the element at (row, col) is imlicit (not in the sparse structure)
-		real getValue(const int row, const int col) const;
+		T getValue(const int row, const int col) const;
 		/// Sets all values to 0
 		void zeroValues();
 		/// If there is a value at position row, col adds value to it
 		/// @param[in] row The row of the added element
 		/// @param[in] col The column of the added element
 		/// @param[in] value The value which will be added to element at position (row, col)
-		bool addEntry(const int row, const int col, const real value);
+		bool addEntry(const int row, const int col, const T value);
 
 		// ********************************************************************
 		// *********** MULTITHREADED VARIANTS OF MATRIX FUNCTIONS *************
@@ -963,7 +1126,7 @@ namespace SMM {
 		/// @param[out] out Preallocated vector where the result is stored
 		/// @param[in, out] tm The thred manager which will run the multithreaded job
 		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
-		void rMult(const real* const mult, real* const out, CPPTM::ThreadManager& tm, const bool async) const noexcept;
+		void rMult(const T* const mult, T* const out, CPPTM::ThreadManager& tm, const bool async) const noexcept;
 		/// @brief Perform matrix vector multiplication and addition: out = lhs + A * mult in a multithreaded fashion.
 		/// Where A is the current CSR matrix
 		/// @param[in] lhs The vector which will be added to the matrix vector product A * mult
@@ -971,7 +1134,7 @@ namespace SMM {
 		/// @param[out] out Preallocated vector where the result is stored
 		/// @param[in, out] tm The thred manager which will run the multithreaded job
 		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
-		void rMultAdd(const real* const lhs, const real* const mult, real* const out, CPPTM::ThreadManager& tm, const bool async) const noexcept;
+		void rMultAdd(const T* const lhs, const T* const mult, T* const out, CPPTM::ThreadManager& tm, const bool async) const noexcept;
 		/// @brief Perform matrix vector multiplication and subtraction: out = lhs - A * mult
 		/// Where A is the current CSR matrix
 		/// @param[in] lhs The vector from which the matrix vector product A * mult will be subtracted
@@ -979,7 +1142,7 @@ namespace SMM {
 		/// @param[out] out Preallocated vector where the result is stored
 		/// @param[in, out] tm The thred manager which will run the multithreaded job
 		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
-		void rMultSub(const real* const lhs, const real* const mult, real* const out, CPPTM::ThreadManager& tm, const bool async) const noexcept;
+		void rMultSub(const T* const lhs, const T* const mult, T* const out, CPPTM::ThreadManager& tm, const bool async) const noexcept;
 		#endif
 
 		// ********************************************************************
@@ -988,7 +1151,7 @@ namespace SMM {
 
 		/// Identity preconditioner. Does nothing, but implements the interface
 		class IDPreconditioner {
-			int apply(const real* rhs, real* x) const noexcept {
+			int apply(const T* rhs, T* x) const noexcept {
 				return 0;
 			}
 		};
@@ -996,7 +1159,7 @@ namespace SMM {
 		/// Symmetric Gauss-Seidel Preconditioner.
 		class SGSPreconditioner {
 		public:
-			SGSPreconditioner(const CSRMatrix& m) noexcept;
+			SGSPreconditioner(const CSRMatrix<T>& m) noexcept;
 			SGSPreconditioner(const SGSPreconditioner&) = delete;
 			SGSPreconditioner& operator=(const SGSPreconditioner&) = delete;
 			SGSPreconditioner(SGSPreconditioner&&) noexcept = default;
@@ -1004,15 +1167,15 @@ namespace SMM {
 			/// @param[in] rhs Vector which will be preconditioned
 			/// @param[out] x The result of preconditioning rhs
 			/// @retval Non zero on error
-			const int apply(const real* rhs, real* x) const noexcept;
+			const int apply(const T* rhs, T* x) const noexcept;
 		private:
-			const CSRMatrix& m;
+			const CSRMatrix<T>& m;
 		};
 
 		/// Zero fill in Incomplete LU Factorization
 		class ILU0Preconditioner {
 		public:
-			ILU0Preconditioner(const CSRMatrix& m) noexcept;
+			ILU0Preconditioner(const CSRMatrix<T>& m) noexcept;
 			ILU0Preconditioner(const ILU0Preconditioner&) = delete;
 			ILU0Preconditioner& operator=(const ILU0Preconditioner&) = delete;
 			ILU0Preconditioner(ILU0Preconditioner&&) noexcept = default;
@@ -1020,7 +1183,7 @@ namespace SMM {
 			/// @param[in] rhs Vector which will be preconditioned
 			/// @param[out] x The result of preconditioning rhs
 			/// @retval Non zero on error
-			const int apply(const real* rhs, real* x) const noexcept;
+			const int apply(const T* rhs, T* x) const noexcept;
 			const int validate() noexcept;
 		private:
 			/// Uses the reference to the original matrix m in order to create the LU facroization
@@ -1030,16 +1193,16 @@ namespace SMM {
 			/// Reference to the matrix for which this decomposition is made
 			/// For this factorization the resulting matrix will have the same non zero pattern as the original matrix,
 			/// Thus we will reuse the two arrays start and positions from the original matrix and allocate space only for the values
-			const CSRMatrix& m;
+			const CSRMatrix<T>& m;
 			/// The values array for the ILU0 preconditioner
-			std::unique_ptr<real[]> ilu0Val;
+			std::unique_ptr<T[]> ilu0Val;
 		};
 
 		/// Zero fill in Incomplete Cholesky preconditioner.
 		/// This preconditioner can be applied only to symmetric positive definite matrices
 		class IC0Preconditioner {
 		public:
-			IC0Preconditioner(const CSRMatrix& m) noexcept;
+			IC0Preconditioner(const CSRMatrix<T>& m) noexcept;
 			IC0Preconditioner(const IC0Preconditioner&) = delete;
 			IC0Preconditioner& operator=(const IC0Preconditioner&) = delete;
 			IC0Preconditioner(IC0Preconditioner&&) = default;
@@ -1051,11 +1214,11 @@ namespace SMM {
 			/// @param[in] rhs Vector which will be preconditioned
 			/// @param[out] x The result of preconditioning rhs
 			/// @retval Non zero on error
-			int apply(const real* rhs, real* x) const noexcept;
+			int apply(const T* rhs, T* x) const noexcept;
 		private:
 			int factorize() noexcept;
-			const CSRMatrix& m;
-			std::unique_ptr<real[]> ic0Val;
+			const CSRMatrix<T>& m;
+			std::unique_ptr<T[]> ic0Val;
 		};
 
 		/// Factory function to generate preconditioners for this matrix
@@ -1066,7 +1229,7 @@ namespace SMM {
 	private:
 		/// Array which will hold all nonzero entries of the matrix.
 		/// This is of length  number of non-zero entries
-		std::unique_ptr<real[]> values;
+		std::unique_ptr<T[]> values;
 		/// This is the column of the i-th value
 		/// Sort the columns in increasing fasion. Some of the preconditioners rely on this.
 		/// Another reason for sorting is that it's more cache friendly when matrix vector multiplication is done
@@ -1082,7 +1245,7 @@ namespace SMM {
 		/// Index in start array. The first row which has nonzero element in it.
 		int firstActiveStart;
 		/// Fill start, positions and values array. The arrays must be allocated with the right sizes before this is called.
-		const int fillArrays(const TripletMatrix& triplet) noexcept;
+		const int fillArrays(const TripletMatrix<T>& triplet) noexcept;
 		/// Get the next row which has at least one element in it
 		/// @param[in] currentStartIndex The current row
 		/// @param[in] startLength The length of the start array (same as the number of rows)
@@ -1096,7 +1259,7 @@ namespace SMM {
 		/// @param[out] out Preallocated vector where the result will be stored.
 		/// @param[in] op Functor which will execute op(lhs, A * mult) it must take in two real vectors.
 		template<typename FunctorType>
-		void rMultOp(const real* const lhs, const real* const mult, real* const out, const FunctorType& op) const noexcept;
+		void rMultOp(const T* const lhs, const T* const mult, T* const out, const FunctorType& op) const noexcept;
 
 		/// Check if there is element at (row, col) and return the index in positions where the elements is
 		/// if there is no such element return -1.
@@ -1117,35 +1280,37 @@ namespace SMM {
 		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
 		template<typename FunctorType>
 		void rMultOp(
-			const real* const lhs,
-			const real* const mult,
-			real* const out,
+			const T* const lhs,
+			const T* const mult,
+			T* const out,
 			const FunctorType& op,
 			CPPTM::ThreadManager& tm,
 			const bool async
 		) const noexcept;
 		#endif
 
-		static real vectorMultFunctor([[maybe_unused]]const real lhs, const real rhs) {
+		static T vectorMultFunctor([[maybe_unused]]const T lhs, const T rhs) {
 			return rhs;
 		}
+
+		static_assert(std::is_convertible_v<CSRMatrix<T>::ConstIterator, CSRMatrix<T>::ConstIterator>);
+		static_assert(std::is_convertible_v<CSRMatrix::Iterator, CSRMatrix::ConstIterator>);
+		static_assert(! std::is_convertible_v<CSRMatrix::ConstIterator, CSRMatrix::Iterator>);
+		static_assert(std::is_convertible_v<CSRMatrix::Iterator, CSRMatrix::Iterator>);
+		static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::ConstIterator>);
+		static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::Iterator>);
+
+		static_assert(std::is_convertible_v<CSRMatrix::ConstRowIterator, CSRMatrix::ConstRowIterator>);
+		static_assert(std::is_convertible_v<CSRMatrix::RowIterator, CSRMatrix::ConstRowIterator>);
+		static_assert(! std::is_convertible_v<CSRMatrix::ConstRowIterator, CSRMatrix::RowIterator>);
+		static_assert(std::is_convertible_v<CSRMatrix::RowIterator, CSRMatrix::RowIterator>);
+		static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::ConstRowIterator>);
+		static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::RowIterator>);
+
 	};
 
-	static_assert(std::is_convertible_v<CSRMatrix::ConstIterator, CSRMatrix::ConstIterator>);
-	static_assert(std::is_convertible_v<CSRMatrix::Iterator, CSRMatrix::ConstIterator>);
-	static_assert(! std::is_convertible_v<CSRMatrix::ConstIterator, CSRMatrix::Iterator>);
-	static_assert(std::is_convertible_v<CSRMatrix::Iterator, CSRMatrix::Iterator>);
-	static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::ConstIterator>);
-	static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::Iterator>);
-
-	static_assert(std::is_convertible_v<CSRMatrix::ConstRowIterator, CSRMatrix::ConstRowIterator>);
-	static_assert(std::is_convertible_v<CSRMatrix::RowIterator, CSRMatrix::ConstRowIterator>);
-	static_assert(! std::is_convertible_v<CSRMatrix::ConstRowIterator, CSRMatrix::RowIterator>);
-	static_assert(std::is_convertible_v<CSRMatrix::RowIterator, CSRMatrix::RowIterator>);
-	static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::ConstRowIterator>);
-	static_assert(std::is_trivially_copy_constructible_v<CSRMatrix::RowIterator>);
-
-	inline CSRMatrix::CSRMatrix() noexcept :
+	template<typename T>
+	inline CSRMatrix<T>::CSRMatrix() noexcept :
 		values(nullptr),
 		positions(nullptr),
 		start(nullptr),
@@ -1154,8 +1319,9 @@ namespace SMM {
 		firstActiveStart(-1)
 	{ }
 
-	inline CSRMatrix::CSRMatrix(const TripletMatrix& triplet) noexcept :
-		values(new real[triplet.getNonZeroCount()]),
+	template<typename T>
+	inline CSRMatrix<T>::CSRMatrix(const TripletMatrix<T>& triplet) noexcept :
+		values(new T[triplet.getNonZeroCount()]),
 		positions(new int[triplet.getNonZeroCount()]),
 		start(new int[triplet.getDenseRowCount() + 1]),
 		denseRowCount(triplet.getDenseRowCount()),
@@ -1165,11 +1331,12 @@ namespace SMM {
 		fillArrays(triplet);
 	}
 
-	inline int CSRMatrix::init(const TripletMatrix& triplet) noexcept {
+	template<typename T>
+	inline int CSRMatrix<T>::init(const TripletMatrix<T>& triplet) noexcept {
 		denseRowCount = triplet.getDenseRowCount();
 		denseColCount = triplet.getDenseColCount();
 		const int nnz = triplet.getNonZeroCount();
-		values.reset(new real[nnz]);
+		values.reset(new T[nnz]);
 		if (!values) {
 			return 1;
 		}
@@ -1188,19 +1355,23 @@ namespace SMM {
 		return 0;
 	}
 
-	inline int CSRMatrix::getNonZeroCount() const noexcept {
+	template<typename T>
+	inline int CSRMatrix<T>::getNonZeroCount() const noexcept {
 		return start[getDenseRowCount()];
 	}
 
-	inline int CSRMatrix::getDenseRowCount() const noexcept {
+	template<typename T>
+	inline int CSRMatrix<T>::getDenseRowCount() const noexcept {
 		return denseRowCount;
 	}
 
-	inline int CSRMatrix::getDenseColCount() const noexcept {
+	template<typename T>
+	inline int CSRMatrix<T>::getDenseColCount() const noexcept {
 		return denseColCount;
 	}
 
-	inline bool CSRMatrix::hasSameNonZeroPattern(const CSRMatrix& other) {
+	template<typename T>
+	inline bool CSRMatrix<T>::hasSameNonZeroPattern(const CSRMatrix<T>& other) {
 		// This function checks if the two matrices have the same non zero pattern.
 		// It relies that all CSR matrices will order their elements the same way.
 		// For example it will not work if the elements in positions are the same, but
@@ -1220,86 +1391,99 @@ namespace SMM {
 		return true;
 	}
 
-	inline CSRMatrix::Iterator CSRMatrix::begin() noexcept {
+	template<typename T>
+	inline typename CSRMatrix<T>::Iterator CSRMatrix<T>::begin() noexcept {
 		return Iterator(this, firstActiveStart, 0);
 	}
 	
-	inline CSRMatrix::ConstIterator CSRMatrix::begin() const noexcept {
+	template<typename T>
+	inline typename CSRMatrix<T>::ConstIterator CSRMatrix<T>::begin() const noexcept {
 		return ConstIterator(this, firstActiveStart, 0);
 	}
 
-	inline CSRMatrix::ConstIterator CSRMatrix::cbegin() const noexcept {
+	template<typename T>
+	inline typename CSRMatrix<T>::ConstIterator CSRMatrix<T>::cbegin() const noexcept {
 		return ConstIterator(this, firstActiveStart, 0);
 	}
 
-	inline CSRMatrix::Iterator CSRMatrix::end() noexcept {
+	template<typename T>
+	inline typename CSRMatrix<T>::Iterator CSRMatrix<T>::end() noexcept {
 		return Iterator(this, denseRowCount, start[denseRowCount]);
 	}
 
-	inline CSRMatrix::ConstIterator CSRMatrix::end() const noexcept {
+	template<typename T>
+	inline typename CSRMatrix<T>::ConstIterator CSRMatrix<T>::end() const noexcept {
 		return ConstIterator(this, denseRowCount, start[denseRowCount]);
 	}
 
-	inline CSRMatrix::ConstIterator CSRMatrix::cend() const noexcept {
+	template<typename T>
+	inline typename CSRMatrix<T>::ConstIterator CSRMatrix<T>::cend() const noexcept {
 		return ConstIterator(this, denseRowCount, start[denseRowCount]);
 	}
 
-	inline CSRMatrix::RowIterator CSRMatrix::rowBegin(const int i) noexcept {
+	template<typename T>
+	inline typename CSRMatrix<T>::RowIterator CSRMatrix<T>::rowBegin(const int i) noexcept {
 		assert(i < denseRowCount);
 		return RowIterator(this, i, start[i]);
 	}
 
-	inline CSRMatrix::ConstRowIterator CSRMatrix::rowBegin(const int i) const noexcept {
+	template<typename T>
+	inline typename CSRMatrix<T>::ConstRowIterator CSRMatrix<T>::rowBegin(const int i) const noexcept {
 		assert(i < denseRowCount);
 		return ConstRowIterator(this, i, start[i]);
 	}
 
-	inline CSRMatrix::ConstRowIterator CSRMatrix::crowBegin(const int i) const noexcept {
+	template<typename T>
+	inline typename CSRMatrix<T>::ConstRowIterator CSRMatrix<T>::crowBegin(const int i) const noexcept {
 		assert(i < denseRowCount);
 		return ConstRowIterator(this, i, start[i]);
 	}
 
-	inline CSRMatrix::RowIterator CSRMatrix::rowEnd(const int i) noexcept {
+	template<typename T>
+	inline typename CSRMatrix<T>::RowIterator CSRMatrix<T>::rowEnd(const int i) noexcept {
 		assert(i < denseRowCount);
 		if(start[i] == start[i+1]) return rowBegin(i);
 		return RowIterator(this, i + 1, start[i + 1]);
 	}
 
-	inline CSRMatrix::ConstRowIterator CSRMatrix::rowEnd(const int i) const noexcept {
+	template<typename T>
+	inline typename CSRMatrix<T>::ConstRowIterator CSRMatrix<T>::rowEnd(const int i) const noexcept {
 		assert(i < denseRowCount);
 		if(start[i] == start[i+1]) return rowBegin(i);
 		return ConstRowIterator(this, i + 1, start[i + 1]);
 	}
 
-	inline CSRMatrix::ConstRowIterator CSRMatrix::crowEnd(const int i) const noexcept {
+	template<typename T>
+	inline typename CSRMatrix<T>::ConstRowIterator CSRMatrix<T>::crowEnd(const int i) const noexcept {
 		assert(i < denseRowCount);
 		if(start[i] == start[i+1]) return rowBegin(i);
 		return ConstRowIterator(this, i + 1, start[i + 1]);
 	}
 
+	template<typename T>
 	template<typename FunctorType>
-	inline void CSRMatrix::rMultOp(
-		const real* const lhs,
-		const real* const mult,
-		real* const out,
+	inline void CSRMatrix<T>::rMultOp(
+		const T* const lhs,
+		const T* const mult,
+		T* const out,
 		const FunctorType& op
 	) const noexcept {
 		int prevRow = 0;
 		for (int row = firstActiveStart; row < denseRowCount; row = getNextStartIndex(row, denseRowCount)) {
-			real dot = 0.0f;
+			T dot = 0.0;
 			// Handles the case when rows are missing from the matrix
 			// Makes sense only for vector multiplication as when there is addition or subtraction
 			// the out vector holds the correct result
 			if constexpr(std::is_same_v<decltype(op), decltype(vectorMultFunctor)>) {
 				for(int i = prevRow; i < row; ++i) {
-					out[i] = op(lhs[row], real(0));
+					out[i] = op(lhs[row], T(0));
 				}
 			}
 
 			// Does the regular operation
 			for (int colIdx = start[row]; colIdx < start[row + 1]; ++colIdx) {
 				const int col = positions[colIdx];
-				const real val = values[colIdx];
+				const T val = values[colIdx];
 				dot = _smm_fma(val, mult[col], dot);
 			}
 			out[row] = op(lhs[row], dot);
@@ -1308,17 +1492,20 @@ namespace SMM {
 		}
 	}
 
-	inline void CSRMatrix::rMult(const real* const mult, real* const res) const noexcept {
+	template<typename T>
+	inline void CSRMatrix<T>::rMult(const T* const mult, T* const res) const noexcept {
 		assert(mult != res);
 		rMultOp(res, mult, res, vectorMultFunctor);
 	}
 
-	inline void CSRMatrix::rMultAdd(const real* const lhs, const real* const mult, real* const out) const noexcept {
-		rMultOp(lhs, mult, out, [](const real lhs, const real rhs) { return lhs + rhs;});
+	template<typename T>
+	inline void CSRMatrix<T>::rMultAdd(const T* const lhs, const T* const mult, T* const out) const noexcept {
+		rMultOp(lhs, mult, out, [](const T lhs, const T rhs) { return lhs + rhs;});
 	}
 
-	inline void CSRMatrix::rMultSub(const real* const lhs, const real* const mult, real* const out) const noexcept {
-		rMultOp(lhs, mult, out, [](const real lhs, const real rhs) { return lhs - rhs;});
+	template<typename T>
+	inline void CSRMatrix<T>::rMultSub(const T* const lhs, const T* const mult, T* const out) const noexcept {
+		rMultOp(lhs, mult, out, [](const T lhs, const T rhs) { return lhs - rhs;});
 	}
  
 
@@ -1326,11 +1513,13 @@ namespace SMM {
 // *********** MULTITHREADED VARIANTS OF MATRIX FUNCTIONS *************
 // ********************************************************************
 #ifdef SMM_MULTITHREADING_CPPTM
+
+	template<typename T>
 	template<typename FunctorType>
-	inline void CSRMatrix::rMultOp(
-		const real* const lhs,
-		const real* const mult,
-		real* const out,
+	inline void CSRMatrix<T>::rMultOp(
+		const T* const lhs,
+		const T* const mult,
+		T* const out,
 		const FunctorType& op,
 		CPPTM::ThreadManager& tm,
 		const bool async
@@ -1342,19 +1531,19 @@ namespace SMM {
 			const int start = startIdx == 0 ? firstActiveStart : getNextStartIndex(startIdx - 1, denseRowCount);
 			int prevRow = startIdx;
 			for (int row = start; row < end; row = getNextStartIndex(row, denseRowCount)) {
-				real dot = 0.0f;
+				T dot = 0.0;
 				// Handles the case when rows are missing from the matrix
 				// Makes sense only for vector multiplication as when there is addition or subtraction
 				// the out vector holds the correct result
 				if constexpr(std::is_same_v<decltype(op), decltype(vectorMultFunctor)>) {
 					for(int i = prevRow; i < row; ++i) {
-						out[i] = op(lhs[row], real(0));
+						out[i] = op(lhs[row], T(0));
 					}
 				}
 				// Does the regular operation
 				for (int colIdx = this->start[row]; colIdx < this->start[row + 1]; ++colIdx) {
 					const int col = positions[colIdx];
-					const real val = values[colIdx];
+					const T val = values[colIdx];
 					dot = _smm_fma(val, mult[col], dot);
 				}
 				out[row] = op(lhs[row], dot);
@@ -1369,62 +1558,68 @@ namespace SMM {
 		}
 	}
 
-	inline void CSRMatrix::rMult(
-		const real* const mult,
-		real* const res,
+	template<typename T>
+	inline void CSRMatrix<T>::rMult(
+		const T* const mult,
+		T* const res,
 		CPPTM::ThreadManager& tm,
 		const bool async
 	) const noexcept {
 		assert(mult != res);
-		auto rhsId = [](const real lhs, const  real rhs) -> real {
+		auto rhsId = [](const Т lhs, const  Т rhs) -> T {
 			return rhs;
 		};
 		rMultOp(res, mult, res, rhsId, tm, async);
 	}
 
-	inline void CSRMatrix::rMultAdd(
-		const real* const lhs,
-		const real* const mult,
-		real* const out,
+	template<typename T>
+	inline void CSRMatrix<T>::rMultAdd(
+		const T* const lhs,
+		const T* const mult,
+		T* const out,
 		CPPTM::ThreadManager& tm,
 		const bool async
 	) const noexcept {
-		auto addOp = [](const real lhs, const real rhs) ->real {
+		auto addOp = [](const T lhs, const T rhs) -> T {
 			return lhs + rhs;
 		};
 		rMultOp(lhs, mult, out, addOp, tm, async);
 	}
 
 
-	inline void CSRMatrix::rMultSub(
-		const real* const lhs,
-		const real* const mult,
-		real* const out,
+	template<typename T>
+	inline void CSRMatrix<T>::rMultSub(
+		const T* const lhs,
+		const T* const mult,
+		T* const out,
 		CPPTM::ThreadManager& tm,
 		const bool async
 	) const noexcept {
-		auto addOp = [](const real lhs, const real rhs) ->real {
+		auto addOp = [](const T lhs, const T rhs) -> T {
 			return lhs - rhs;
 		};
 		rMultOp(lhs, mult, out, addOp, tm, async);
 	}
 #endif
 
-	inline const int CSRMatrix::getNextStartIndex(int currentStartIndex, int startLength) const noexcept {
+	template<typename T>
+	inline const int CSRMatrix<T>::getNextStartIndex(int currentStartIndex, int startLength) const noexcept {
 		do {
 			currentStartIndex++;
 		} while (currentStartIndex < startLength && start[currentStartIndex] == start[currentStartIndex + 1]);
 		return currentStartIndex;
 	}
 
-	inline void CSRMatrix::operator*=(const real scalar) {
+	template<typename T>
+	inline void CSRMatrix<T>::operator*=(const T scalar) {
 		const int nonZeroCount = getNonZeroCount();
 		for(int i = 0; i < nonZeroCount; ++i) {
 			values[i] *= scalar;
 		}
 	}
 
-	inline void CSRMatrix::inplaceAdd(const CSRMatrix& other) {
+	template<typename T>
+	inline void CSRMatrix<T>::inplaceAdd(const CSRMatrix<T>& other) {
 		assert(hasSameNonZeroPattern(other) && "The two matrices have different nonzero patterns");
 		const int nonZeroCount = getNonZeroCount();
 		for(int i = 0; i < nonZeroCount; ++i) {
@@ -1432,7 +1627,8 @@ namespace SMM {
 		}
 	}
 
-	inline void CSRMatrix::inplaceSubtract(const CSRMatrix& other) {
+	template<typename T>
+	inline void CSRMatrix<T>::inplaceSubtract(const CSRMatrix<T>& other) {
 		assert(hasSameNonZeroPattern(other) && "The two matrices have different nonzero patterns");
 		const int nonZeroCount = getNonZeroCount();
 		for(int i = 0; i < nonZeroCount; ++i) {
@@ -1440,7 +1636,8 @@ namespace SMM {
 		}
 	}
 
-	inline int CSRMatrix::getValueIndex(const int row, const int col) const {
+	template<typename T>
+	inline int CSRMatrix<T>::getValueIndex(const int row, const int col) const {
 		assert(row >= 0 && row < denseRowCount);
 		assert(col >= 0 && col < denseColCount);
 		// Assumes that the columns are sorted in increasing order
@@ -1460,7 +1657,8 @@ namespace SMM {
 		return -1;
 	}
 
-	inline bool CSRMatrix::updateEntry(const int row, const int col, const real newValue) {
+	template<typename T>
+	inline bool CSRMatrix<T>::updateEntry(const int row, const int col, const T newValue) {
 		const int index = getValueIndex(row, col);
 		if(index != -1) {
 			values[index] = newValue;
@@ -1468,19 +1666,23 @@ namespace SMM {
 		}
 		return false;
 	}
-	inline real CSRMatrix::getValue(const int row, const int col) const {
+
+	template<typename T>
+	inline T CSRMatrix<T>::getValue(const int row, const int col) const {
 		const int index = getValueIndex(row, col);
 		if(index != -1) {
 			return values[index];
 		}
-		return real(0);
+		return T(0);
 	}
 
-	inline void CSRMatrix::zeroValues() {
-		std::fill_n(values.get(), getNonZeroCount(), real(0));
+	template<typename T>
+	inline void CSRMatrix<T>::zeroValues() {
+		std::fill_n(values.get(), getNonZeroCount(), T(0));
 	}
 
-	inline bool CSRMatrix::addEntry(const int row, const int col, const real value) {
+	template<typename T>
+	inline bool CSRMatrix<T>::addEntry(const int row, const int col, const T value) {
 		const int index = getValueIndex(row, col);
 		if(index == -1) {
 			return 0;
@@ -1489,7 +1691,8 @@ namespace SMM {
 		return 1;
 	}
 
-	inline const int CSRMatrix::fillArrays(const TripletMatrix& triplet) noexcept {
+	template<typename T>
+	inline const int CSRMatrix<T>::fillArrays(const TripletMatrix<T>& triplet) noexcept {
 		const int n = getDenseRowCount();
 		std::unique_ptr<int[], decltype(&free)> count(static_cast<int*>(calloc(n, sizeof(int))), &free);
 		if (count == nullptr) {
@@ -1525,8 +1728,9 @@ namespace SMM {
 		return 0;
 	}
 
+	template<typename T>
 	template<SolverPreconditioner precond>
-	inline decltype(auto) CSRMatrix::getPreconditioner() const noexcept {
+	inline decltype(auto) CSRMatrix<T>::getPreconditioner() const noexcept {
 		if constexpr (precond == SolverPreconditioner::NONE) {
 			return IDPreconditioner();
 		} else if constexpr (precond == SolverPreconditioner::SYMMETRIC_GAUS_SEIDEL) {
@@ -1534,11 +1738,13 @@ namespace SMM {
 		}
 	}
 
-	inline CSRMatrix::SGSPreconditioner::SGSPreconditioner(const CSRMatrix& m) noexcept :
+	template<typename T>
+	inline CSRMatrix<T>::SGSPreconditioner::SGSPreconditioner(const CSRMatrix& m) noexcept :
 		m(m)
 	{}
 
-	inline const int CSRMatrix::SGSPreconditioner::apply(const real* rhs, real* x) const noexcept {
+	template<typename T>
+	inline const int CSRMatrix<T>::SGSPreconditioner::apply(const T* rhs, T* x) const noexcept {
 		// The symmetric Gaus-Seidel comes in the form M = (D + L)D^-1(D + U)
 		// We want to find x=M^{-1}rhs, note however that (D + L) is lower triangular matrix
 		// D^-1(D + U) is upper trianguar matrix, thus it can be rewritten as Mx=rhs and solved in two
@@ -1561,8 +1767,8 @@ namespace SMM {
 				return 1;
 			}
 			int col = m.positions[indexInRow];
-			real value = m.values[indexInRow];
-			real lhs = rhs[row];
+			T value = m.values[indexInRow];
+			T lhs = rhs[row];
 			while(col < row) {
 				lhs = _smm_fma(-value, x[col], lhs);
 				++indexInRow;
@@ -1580,8 +1786,8 @@ namespace SMM {
 		for(int row = m.getDenseRowCount() - 1; row >= 0; --row) {
 			int indexInRow = m.start[row + 1] - 1;
 			int col = m.positions[indexInRow];
-			real value = m.values[indexInRow];
-			real lhs(0);
+			T value = m.values[indexInRow];
+			T lhs(0);
 			while(col > row) {
 				lhs = _smm_fma(value, x[col], lhs);
 				--indexInRow;
@@ -1594,16 +1800,19 @@ namespace SMM {
 		return 0;
 	}
 
-	inline CSRMatrix::ILU0Preconditioner::ILU0Preconditioner(const CSRMatrix& m) noexcept : 
+	template<typename T>
+	inline CSRMatrix<T>::ILU0Preconditioner::ILU0Preconditioner(const CSRMatrix<T>& m) noexcept : 
 		m(m),
-		ilu0Val(std::make_unique<real[]>(m.getNonZeroCount()))
+		ilu0Val(std::make_unique<T[]>(m.getNonZeroCount()))
 	{	}
 
-	inline const int CSRMatrix::ILU0Preconditioner::validate() noexcept {
+	template<typename T>
+	inline const int CSRMatrix<T>::ILU0Preconditioner::validate() noexcept {
 		return factorize();
 	}
 
-	inline int CSRMatrix::ILU0Preconditioner::factorize() noexcept {
+	template<typename T>
+	inline int CSRMatrix<T>::ILU0Preconditioner::factorize() noexcept {
 		// L and U will have the same non zero pattern as the lower and upper triangular parts of m
 		// The decompozition will take the form m = L * U + R, where we shall take only L and U and 
 		// m - L * U will be zero for all non zero elements of m, but m - L * U might have some non zero
@@ -1612,7 +1821,7 @@ namespace SMM {
 		const int rows = m.getDenseRowCount();
 		const int cols = m.getDenseColCount();
 		assert(rows == cols);
-		memcpy(ilu0Val.get(), m.values.get(), sizeof(real) * m.getNonZeroCount());
+		memcpy(ilu0Val.get(), m.values.get(), sizeof(T) * m.getNonZeroCount());
 		assert(m.firstActiveStart == 0 && "The matrix does not have full rank");
 		if(m.firstActiveStart != 0) {
 			return 1;
@@ -1628,8 +1837,8 @@ namespace SMM {
 		std::vector<int> columnIndex(cols, -1);
 		// TODO [Move Diagonal To End]: This can be avoided if the diagonal elements are kept in a fixed position in each row
 		// For example keep the diagonal element in the end of the row.
-		Vector diagonalElementsInv(rows);
-		diagonalElementsInv[0] = real(1) / m.values[0];
+		Vector<T> diagonalElementsInv(rows);
+		diagonalElementsInv[0] = T(1.0) / m.values[0];
 		// The algorithm assumes that the columns in each row are sorted in increasing order
 		// U will have explicit main diagonal, L will have implicit main diagonal filled with 1
 		// The first row is trivial to compute, as u_{i,j} = m_{i,j} / l_{i,j}, but l_{i,j} = 1
@@ -1644,20 +1853,20 @@ namespace SMM {
 			int kPos = rowStart;
 			int k = m.positions[kPos];
 			for(; k < row; k = m.positions[++kPos]) {
-				const real alphaIK = ilu0Val[kPos] * diagonalElementsInv[k];
+				const T alphaIK = ilu0Val[kPos] * diagonalElementsInv[k];
 				ilu0Val[kPos] = alphaIK;
 				for(int colPos = m.start[k + 1] - 1, col = m.positions[colPos]; col > 0; col = m.positions[--colPos]) {
-					const real betaKJ = ilu0Val[colPos];
+					const T betaKJ = ilu0Val[colPos];
 					if(columnIndex[col] != -1) {
 						ilu0Val[columnIndex[col]] -= alphaIK * betaKJ;
 					}
 				}
 			}
-			assert(k == row && ilu0Val[kPos] > 1e-6f && "Zero in pivot position!");
-			if(k == row && ilu0Val[kPos] > 1e-6f) {
+			assert(k == row && ilu0Val[kPos] > 1e-6 && "Zero in pivot position!");
+			if(k == row && ilu0Val[kPos] > 1e-6) {
 				return 2;
 			}
-			diagonalElementsInv[k] = real(1) / ilu0Val[kPos];
+			diagonalElementsInv[k] = T(1.0) / ilu0Val[kPos];
 			// Clear the column indexes and prepare them for the next iterations
 			for(int i = rowStart; i < rowEnd; ++i) {
 				const int column = m.positions[i];
@@ -1668,19 +1877,22 @@ namespace SMM {
 		return 0;
 	}
 
-	inline CSRMatrix::IC0Preconditioner::IC0Preconditioner(const CSRMatrix& m) noexcept :
+	template<typename T>
+	inline CSRMatrix<T>::IC0Preconditioner::IC0Preconditioner(const CSRMatrix<T>& m) noexcept :
 		m(m)
 	{}
 
-	inline int CSRMatrix::IC0Preconditioner::init() noexcept {
+	template<typename T>
+	inline int CSRMatrix<T>::IC0Preconditioner::init() noexcept {
 		return factorize();
 	}
 
-	inline int CSRMatrix::IC0Preconditioner::apply(const real* rhs, real* x) const noexcept {
+	template<typename T>
+	inline int CSRMatrix<T>::IC0Preconditioner::apply(const T* rhs, T* x) const noexcept {
 		const int rows = m.getDenseRowCount();
 		// Solve L.y = rhs, y = Transpose(L).x
 		for(int row = 0; row < rows; ++row) {
-			real sum = rhs[row];
+			T sum = rhs[row];
 			const int rowStart = m.start[row];
 			const int rowEnd = m.start[row+1];
 			int j = rowStart;
@@ -1696,7 +1908,7 @@ namespace SMM {
 
 		// Solve Transpose(L).x = y
 		for(int row = rows - 1; row >= 0; --row) {
-			real sum = x[row];
+			T sum = x[row];
 			const int rowStart = m.start[row];
 			const int rowEnd = m.start[row+1];
 			int j = rowEnd - 1;
@@ -1712,11 +1924,12 @@ namespace SMM {
 		return 0;
 	}
 
-	inline int CSRMatrix::IC0Preconditioner::factorize() noexcept {
+	template<typename T>
+	inline int CSRMatrix<T>::IC0Preconditioner::factorize() noexcept {
 		const int nnz = m.getNonZeroCount();
 		const int rows = m.getDenseRowCount();
 		assert(rows == m.getDenseColCount());
-		ic0Val.reset(new real[nnz]);
+		ic0Val.reset(new T[nnz]);
 		// For each row this will be an offset to where we can put a value. For the i-th element we have that
 		// nextFreeSlot[i] >= 0 && nextFreeSlot[i] < CSRMatrix::start[i + 1] - CSRMatrix::start[i] i.e. the i-th elements is
 		// between 0 and the number of nonzero elements in the row. In order to obtain the correcto position
@@ -1737,7 +1950,7 @@ namespace SMM {
 				usedColumns[col] = j;
 			}
 			// Use separate loop to handle the diagonal element
-			real diagonalElement(0);
+			T diagonalElement(0);
 			int columnIndex = m.start[i];
 			int column = m.positions[columnIndex];
 			while(column < i) {
@@ -1755,7 +1968,7 @@ namespace SMM {
 			assert(std::abs(diagonalElement) > 1e-6 && "The diagonal element is 0. The matrix is not possitive definite.");
 			ic0Val[diagonalPosition] = diagonalElement;
 			nextFreeSlot[i]++;
-			const real diagonalIversed = real(1) / diagonalElement;
+			const T diagonalIversed = T(1) / diagonalElement;
 			
 			// When we represent the matrix in the form L*Transpose(L) for the element at position (i, j)
 			// of the original matrix is given by: a_i,j = Sum(l_i,k * l_k,j). Because of the symmetry of the matrix
@@ -1769,7 +1982,7 @@ namespace SMM {
 					continue;
 				}
 				// The most inner loop of the tree is just doing the sum: Sum(l_i,k * l_j,k) for k < i 
-				real sum(0);
+				T sum(0);
 				const int rowEnd = m.start[j+1];
 				int k = rowStart, column = m.positions[k];
 				while(k < rowEnd && column < i) {
@@ -1802,7 +2015,8 @@ namespace SMM {
 		return 0;
 	}
 
-	inline void saveDenseText(const char* filepath, const CSRMatrix& m) {
+	template<typename T>
+	inline void saveDenseText(const char* filepath, const CSRMatrix<T>& m) {
 		std::ofstream file(filepath);
 		if (!file.is_open()) {
 			return;
@@ -1827,7 +2041,7 @@ namespace SMM {
 		};
 
 		int lastRow = -1, lastCol = -1;
-		CSRMatrix::ConstIterator it = m.begin();
+		typename CSRMatrix<T>::ConstIterator it = m.begin();
 		file << m.getDenseRowCount() << " " << m.getDenseColCount() << "\n";
 		file << "{\n";
 		while (it != m.end()) {
@@ -1873,7 +2087,7 @@ namespace SMM {
 	/// @param[in] compressed Matrix in Compressed Sparse Row format
 	/// @param[out] out Preallocated (and filled with zero) space where the dense matrix will be added
 	template<typename CompressedMatrixFormat>
-	inline void toLinearDenseRowMajor(const CompressedMatrixFormat& compressed, real* out) noexcept {
+	inline void toLinearDenseRowMajor(const CompressedMatrixFormat& compressed, typename CompressedMatrixFormat::value_type* out) noexcept {
 		const int64_t colCount = compressed.getDenseColCount();
 		for (const auto& el : compressed) {
 			const int64_t index = el.getRow() * colCount + el.getCol();
@@ -1892,12 +2106,13 @@ namespace SMM {
 	/// @param[in] b Right hand side for the system of equations
 	/// @param[in,out] x Initial condition, the result will be written here too 
 	/// @return SolverStatus the status the solved system
+	template<typename T>
 	inline SolverStatus BiCGSymmetric(
-		const CSRMatrix& a,
-		real* b,
-		real* x,
+		const CSRMatrix<T>& a,
+		T* b,
+		T* x,
 		int maxIterations,
-		real eps
+		T eps
 	) {
 
 		maxIterations = std::min(maxIterations, a.getDenseRowCount());
@@ -1905,22 +2120,22 @@ namespace SMM {
 			maxIterations = a.getDenseRowCount();
 		}
 
-		Vector r(a.getDenseRowCount());
+		Vector<T> r(a.getDenseRowCount());
 		a.rMultSub(b, x, r);
 
-		Vector p(a.getDenseRowCount());
+		Vector<T> p(a.getDenseRowCount());
 		for (int i = 0; i < p.getSize(); ++i) {
 			p[i] = r[i];
 		}
 
-		Vector ap(a.getDenseRowCount());
+		Vector<T> ap(a.getDenseRowCount());
 
-		real rSquare = r * r;
+		T rSquare = r * r;
 		int iterations = 0;
-		real infNorm = real(0);
+		T infNorm = T(0);
 		do {
 			a.rMult(p, ap);
-			const real denom = ap* p;
+			const T denom = ap* p;
 #ifdef SMM_DEBUG_PRINT
 			std::cout << "i: " << iterations << std::endl;
 			std::cout << "r^2: " << rSquare << std::endl;
@@ -1935,8 +2150,8 @@ namespace SMM {
 			if (eps > std::abs(denom) && rSquare > 1) {
 				return SolverStatus::DIVERGED;
 			}
-			const real alpha = rSquare / denom;
-			infNorm = real(0);
+			const T alpha = rSquare / denom;
+			infNorm = T(0);
 			for(int i = 0; i < a.getDenseRowCount(); ++i) {
 				x[i] += alpha * p[i];
 				r[i] -= alpha * ap[i];
@@ -1944,7 +2159,7 @@ namespace SMM {
 			}
 			// Dot product r * r can be zero (or close to zero) only if r has length close to zero.
 			// But if the residual is close to zero, this means that we have found a solution
-			const real newRSquare = r * r;
+			const T newRSquare = r * r;
 #ifdef SMM_DEBUG_PRINT
 			std::cout << "alpha: " << alpha << std::endl;
 			std::cout << "new r^2: " << newRSquare << std::endl;
@@ -1955,7 +2170,7 @@ namespace SMM {
 			if(newRSquare > 1 && rSquare < eps) {
 				return SolverStatus::DIVERGED;
 			}
-			const real beta = newRSquare / rSquare;
+			const T beta = newRSquare / rSquare;
 #ifdef SMM_DEBUG_PRINT
 			std::cout << "beta: " << beta << std::endl;
 			std::cout << "==================================================" << std::endl;
@@ -1978,45 +2193,46 @@ namespace SMM {
 	/// @param[in] b Right hand side for the system of equations
 	/// @param[in,out] x Initial condition, the result will be written here too 
 	/// @return SolverStatus the status the solved system
-	inline SolverStatus BiCGSquared(const CSRMatrix& a, real* b, real* x, int maxIterations, real eps) {
+	template<typename T>
+	inline SolverStatus BiCGSquared(const CSRMatrix<T>& a, T* b, T* x, int maxIterations, T eps) {
 		maxIterations = std::min(maxIterations, a.getDenseRowCount());
 		if (maxIterations == -1) {
 			maxIterations = a.getDenseRowCount();
 		}
 
 		const int rows = a.getDenseRowCount();
-		Vector r(rows), r0(rows);
+		Vector<T> r(rows), r0(rows);
 		a.rMultSub(b, x, r);
 		
 		// Help vectors, as in Saad's book, the vectors in the polynomial reccursion are: q, p, r
 		// They can be expressed only in terms of themselves, the other vectors do same some computation
 		// of the use a lot of memory they can be removed.
-		Vector p(rows), u(rows), q(rows), alphaUQ(rows), ap(rows);
+		Vector<T> p(rows), u(rows), q(rows), alphaUQ(rows), ap(rows);
 		for(int i = 0; i < rows; ++i) {
 			p[i] = r[i];
 			u[i] = r[i];
 			r0[i] = r[i];
 		}
 
-		real rr0 = r * r0;
-		real infNorm = real(0);
+		T rr0 = r * r0;
+		T infNorm = T(0);
 		int iterations = 0;
 		do {
 			a.rMult(p, ap);
-			const real denom = ap * r0;
+			const T denom = ap * r0;
 			// Must investigate if denom < eps is critical breakdown
-			const real alpha = rr0 / denom;
+			const T alpha = rr0 / denom;
 			for(int i = 0; i < rows; ++i) {
 				q[i] = _smm_fma(-alpha, ap[i], u[i]);
 				alphaUQ[i] = alpha * (u[i] + q[i]);
 				x[i] = x[i] + alphaUQ[i];
 			}
 			a.rMultSub(r, alphaUQ, r);
-			const real newRR0 = r * r0;
+			const T newRR0 = r * r0;
 			// Must investigate if rr0 < eps is critical breakdown
-			const real beta = newRR0 / rr0;
+			const T beta = newRR0 / rr0;
 			
-			infNorm = real(0);
+			infNorm = T(0);
 			for(int i = 0; i < rows; ++i) {
 				u[i] = _smm_fma(beta, q[i], r[i]);
 				p[i] = _smm_fma(beta, _smm_fma(beta, p[i], q[i]), u[i]);
@@ -2043,13 +2259,13 @@ namespace SMM {
 	/// @param[in] eps Required size of the L2 norm of the residual
 	/// @param[in] precond Preconditioner class which will be applied to the current system
 	/// @return SolverStatus the status the solved system
-	template<typename Preconditioner>
+	template<typename Preconditioner, typename T>
 	inline SolverStatus BiCGStab(
-		const CSRMatrix& a,
-		real* b,
-		real* x,
+		const CSRMatrix<T>& a,
+		T* b,
+		T* x,
 		int maxIterations,
-		real eps,
+		T eps,
 		const Preconditioner& preconditioner
 	) {
 		maxIterations = std::min(maxIterations, a.getDenseRowCount());
@@ -2060,13 +2276,13 @@ namespace SMM {
 		const int rows = a.getDenseRowCount();
 		// This vector is allocated only if there is some preconditioner different than the identity
 		// It is used to store intermediate data needed by the preconditioner
-		Vector precondScratchpad;
-		constexpr bool precondition = !std::is_same<Preconditioner, decltype(a.getPreconditioner<SolverPreconditioner::NONE>())>::value;
+		Vector<T> precondScratchpad;
+		constexpr bool precondition = !std::is_same<Preconditioner, decltype(a.template getPreconditioner<SolverPreconditioner::NONE>())>::value;
 		if constexpr(precondition) {
 			precondScratchpad.init(rows);
 		}
 
-		Vector r(rows), r0(rows), p(rows), ap(rows), s(rows), as(rows);
+		Vector<T> r(rows), r0(rows), p(rows), ap(rows), s(rows), as(rows);
 		a.rMultSub(b, x, r);
 
 		if constexpr(precondition) {
@@ -2081,9 +2297,9 @@ namespace SMM {
 			p[i] = r[i];
 		}
 
-		real resL2Norm = real(0);
+		T resL2Norm = T(0);
 		int iterations = 0;
-		real rr0 = r * r0;
+		T rr0 = r * r0;
 		do {
 			if constexpr(precondition) {
 				a.rMult(p, precondScratchpad);
@@ -2095,8 +2311,8 @@ namespace SMM {
 				a.rMult(p, ap);
 			}
 
-			real denom = ap * r0;
-			const real alpha = rr0 / denom;
+			T denom = ap * r0;
+			const T alpha = rr0 / denom;
 			for(int i = 0; i < rows; ++i) {
 				s[i] = _smm_fma(-alpha, ap[i], r[i]);
 			}
@@ -2113,17 +2329,17 @@ namespace SMM {
 
 			denom = as * as;
 			// TODO: add proper check for division by zero
-			const real omega = (as * s) / denom;
-			resL2Norm = real(0);
+			const T omega = (as * s) / denom;
+			resL2Norm = T(0);
 			for(int i = 0; i < rows; ++i) {
 				x[i] = _smm_fma(alpha, p[i], _smm_fma(omega, s[i], x[i])); 
 				r[i] = _smm_fma(-omega, as[i], s[i]); 
 				resL2Norm += r[i] * r[i];
 			}
 			resL2Norm = std::sqrt(resL2Norm);
-			const real newRR0 = r * r0;
+			const T newRR0 = r * r0;
 			// TODO: add proper check for division by zero
-			const real beta = (newRR0 * alpha) / (rr0 * omega);
+			const T beta = (newRR0 * alpha) / (rr0 * omega);
 			for(int i = 0; i < rows; ++i) {
 				p[i] = _smm_fma(beta, (_smm_fma(-omega, ap[i], p[i])), r[i]);
 			}
@@ -2146,14 +2362,15 @@ namespace SMM {
 	/// If maxIterations is -1 the method will do all possible iterations (the same as the number of rows in the matrix)
 	/// @param[in] eps Required size of the L2 norm of the residual
 	/// @return SolverStatus the status the solved system
+	template<typename T>
 	inline SolverStatus BiCGStab(
-		const CSRMatrix& a,
-		real* b,
-		real* x,
+		const CSRMatrix<T>& a,
+		T* b,
+		T* x,
 		int maxIterations,
-		real eps
+		T eps
 	) {
-		return BiCGStab(a, b, x, maxIterations, eps, a.getPreconditioner<SolverPreconditioner::NONE>());
+		return BiCGStab(a, b, x, maxIterations, eps, a.template getPreconditioner<SolverPreconditioner::NONE>());
 	}
 
 	///@brief Solve a.x=b using Cojugate Gradient method
@@ -2167,13 +2384,14 @@ namespace SMM {
 	/// If maxIterations is -1 the method will do all possible iterations (the same as the number of rows in the matrix)
 	/// @param[in] eps Required size of the L2 norm of the residual
 	/// @return SolverStatus the status the solved system
+	template<typename T>
 	inline SolverStatus ConjugateGradient(
-		const CSRMatrix& a,
-		const real* const b,
-		const real* const x0,
-		real* const x,
+		const CSRMatrix<T>& a,
+		const T* const b,
+		const T* const x0,
+		T* const x,
 		int maxIterations,
-		real eps
+		T eps
 	) {
 		// The algorithm in pseudo code is as follows:
 		// 1. r_0 = b - A.x_0
@@ -2185,12 +2403,12 @@ namespace SMM {
 		// 7. 	beta_j = (r_{j+1}, r_{j+1}) / (r_j, r_j)
 		// 8.	p_{j+1} = r_{j+1} + beta_j * p_j
 		const int rows = a.getDenseRowCount();
-		const real epsSuared = eps * eps;
-		Vector r(rows, real(0));
+		const T epsSuared = eps * eps;
+		Vector<T> r(rows, T(0));
 		a.rMultSub(b, x0, r);
 
-		Vector p(rows), Ap(rows, real(0));
-		real residualNormSquared = 0;
+		Vector<T> p(rows), Ap(rows, T(0));
+		T residualNormSquared = 0;
 		for(int i = 0; i < rows; ++i) {
 			p[i] = r[i];
 			residualNormSquared += r[i] * r[i];
@@ -2204,17 +2422,17 @@ namespace SMM {
 		// We have initial condition different than the output vector on the first iteration when we compute
 		// x = x + alpha * p, we must have the x on the right hand side to be the initial condition x. And on all
 		// next iterations it must be the output vector.
-		const real* currentX = x0;
+		const T* currentX = x0;
 		for(int i = 0; i < maxIterations; ++i) {
 			a.rMult(p, Ap);
-			const real pAp = Ap * p;
+			const T pAp = Ap * p;
 			// If the denominator is 0 we have a lucky breakdown. The residual at the previous step must be 0.
 			assert(pAp != 0);
 			// alpha = (r_i, r_i) / (Ap, p)
-			const real alpha = residualNormSquared / pAp;
+			const T alpha = residualNormSquared / pAp;
 			// x = x + alpha * p
 			// r = r - alpha * Ap
-			real newResidualNormSquared = 0;
+			T newResidualNormSquared = 0;
 			for(int j = 0; j < rows; ++j) {
 				x[j] = _smm_fma(alpha, p[j], currentX[j]);
 				r[j] = _smm_fma(-alpha, Ap[j], r[j]);
@@ -2224,7 +2442,7 @@ namespace SMM {
 				return SolverStatus::SUCCESS;
 			}
 			// beta = (r_{i+1}, r_(i+1)) / (r_i, r_i)
-			const real beta = newResidualNormSquared / residualNormSquared;
+			const T beta = newResidualNormSquared / residualNormSquared;
 			residualNormSquared = newResidualNormSquared;
 			// p = r + beta * p
 			for(int j = 0; j < rows; ++j) {
@@ -2249,14 +2467,15 @@ namespace SMM {
 	/// @param[in] eps Required size of the L2 norm of the residual
 	/// @param[in] preconditioner Incomplete Cholesky preconditioner which will be used precondition this system.
 	/// @return SolverStatus the status the solved system
+	template<typename T>
 	inline SolverStatus ConjugateGradient(
-		const CSRMatrix& a,
-		const real* const b,
-		const real* const x0,
-		real* const x,
+		const CSRMatrix<T>& a,
+		const T* const b,
+		const T* const x0,
+		T* const x,
 		int maxIterations,
-		real eps,
-		const CSRMatrix::IC0Preconditioner& M
+		T eps,
+		const typename CSRMatrix<T>::IC0Preconditioner& M
 	) {
 		// Pseudo code for the algorithm:
 		// 1. r_0 = b - A.x_0
@@ -2270,14 +2489,14 @@ namespace SMM {
 		// 9.	beta_j = (r_{j+1}, z_{j+1}) / (r_j, z_j)
 		// 10.	p_{j+1} = z_{j+1} + beta_j * p_j
 		const int rows = a.getDenseRowCount();
-		const real epsSuared = eps * eps;
-		Vector r(rows, 0);
-		Vector z(rows, 0);
-		Vector p(rows, 0);
+		const T epsSuared = eps * eps;
+		Vector<T> r(rows, 0);
+		Vector<T> z(rows, 0);
+		Vector<T> p(rows, 0);
 		a.rMultSub(b, x0, r);
 		M.apply(r, z);
-		real rz = 0;
-		real residualNormSquared = 0;
+		T rz = 0;
+		T residualNormSquared = 0;
 		for(int i = 0; i < rows; ++i) {
 			rz += r[i] * z[i];
 			p[i] = z[i];
@@ -2289,18 +2508,18 @@ namespace SMM {
 		if(maxIterations == -1) {
 			maxIterations = rows;
 		}
-		Vector Ap(rows, 0);
+		Vector<T> Ap(rows, 0);
 		// We have initial condition different than the output vector on the first iteration when we compute
 		// x = x + alpha * p, we must have the x on the right hand side to be the initial condition x. And on all
 		// next iterations it must be the output vector.
-		const real* currentX = x0;
+		const T* currentX = x0;
 		for(int i = 0; i < maxIterations; ++i) {
 			a.rMult(p, Ap);
-			const real pAp = Ap * p;
+			const T pAp = Ap * p;
 			// If the denominator is 0 we have a lucky breakdown. The residual at the previous step must be 0.
 			assert(pAp != 0);
 			// alpha_j = (r_j, z_j) / (A.p_j, p_j)
-			const real alpha = rz / pAp;
+			const T alpha = rz / pAp;
 			// x_{j+1} = x_j + alpha_j * p_j
 			// r_{j+1} = r_j - alpha_j * A.p_j
 			for(int j = 0; j < rows; ++j) {
@@ -2308,7 +2527,7 @@ namespace SMM {
 				r[j] = _smm_fma(-alpha, Ap[j], r[j]);
 			}
 			M.apply(r, z);
-			real newRZ = 0;
+			T newRZ = 0;
 			residualNormSquared = 0;
 			for(int j = 0; j < rows; ++j) {
 				newRZ += r[j] * z[j];
@@ -2317,7 +2536,7 @@ namespace SMM {
 			if(epsSuared > residualNormSquared) {
 				return SMM::SolverStatus::SUCCESS;
 			}
-			const real beta = newRZ / rz;
+			const T beta = newRZ / rz;
 			// p_{j+1} = z_{j+1} + beta_j * p_j
 			for(int j = 0; j < rows; ++j) {
 				p[j] = _smm_fma(beta, p[j], z[j]);
@@ -2352,7 +2571,8 @@ namespace SMM {
 	/// @param filename Path to the file with the matrix
 	/// @param out Matrix in triplet (coordinate) for containing the data from the file
 	/// @return MatrixLoadStatus Error code for the function
-	inline MatrixLoadStatus loadMatrixMarketMatrix(const char* filepath, TripletMatrix& out) {
+	template<typename T>
+	inline MatrixLoadStatus loadMatrixMarketMatrix(const char* filepath, TripletMatrix<T>& out) {
 		std::ifstream file(filepath);
 		if (!file.is_open()) {
 			return MatrixLoadStatus::FAILED_TO_OPEN_FILE;
@@ -2410,7 +2630,7 @@ namespace SMM {
 		int filerow = 0;
 		while (!file.eof()) {
 			int row, col;
-			real value;
+			T value;
 			file >> row >> col >> value;
 			if (file.fail()) {
 				return MatrixLoadStatus::FAILED_TO_PARSE_FILE;
@@ -2431,7 +2651,8 @@ namespace SMM {
 		return MatrixLoadStatus::SUCCESS;
 	}
 
-	inline MatrixLoadStatus loadSMMDTMatrix(const char* filepath, TripletMatrix& out) {
+	template<typename T>
+	inline MatrixLoadStatus loadSMMDTMatrix(const char* filepath, TripletMatrix<T>& out) {
 		std::ifstream file(filepath);
 		if (!file.is_open()) {
 			return MatrixLoadStatus::FAILED_TO_OPEN_FILE;
@@ -2448,7 +2669,7 @@ namespace SMM {
 		for (int i = 0; i < rows; ++i) {
 			file.ignore(std::numeric_limits<std::streamsize>::max(), '{');
 			for (int j = 0; j < cols; ++j) {
-				real val;
+				T val;
 				file >> val;
 				if (file.fail()) {
 					return MatrixLoadStatus::FAILED_TO_PARSE_FILE;
@@ -2467,7 +2688,8 @@ namespace SMM {
 		return MatrixLoadStatus::SUCCESS;
 	}
 
-	inline MatrixLoadStatus loadMatrix(const char* filepath, TripletMatrix& out) {
+	template<typename T>
+	inline MatrixLoadStatus loadMatrix(const char* filepath, TripletMatrix<T>& out) {
 		const char* fileExtension = strrchr(filepath, '.') + 1;
 		if (strcmp(fileExtension, "mtx") == 0) {
 			return loadMatrixMarketMatrix(filepath, out);
