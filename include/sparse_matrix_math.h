@@ -848,12 +848,21 @@ namespace SMM {
 	template<typename MatrixPtrT>
 	class CSRIterator : public _CSRIteratorBase<MatrixPtrT> {
 	public:
+		/// Construct an iterator to the matrix m starting from currentRow and having column pointer columnPointer
+		/// @param[in] m The matrix which the iterator will iterate
+		/// @param[in] currentRow The row from which the iterator will start
+		/// @param[in] columnPointer Index into the array which holds ms columns and values
 		CSRIterator(
 			MatrixPtrT m,
-			const int currentStartIndex,
-			const int currentPositionIndex
+			const int currentRow,
+			const int columnPointer
 		) noexcept;
 
+		/// Template constructor which handles copy constructions and construction of const iterator from non-const iterator
+		/// @tparam Other The type of the matrix which the passed object iterates. We check if the pointer is pointer to const
+		/// and if it is we can create only const iterators from it. If the type is just a pointer we can create const and 
+		/// non-const iteratos with this constructor
+		/// @param[in] other The iterator which will be copied when initializing this object
 		template<typename Other, typename = std::enable_if_t<!is_ptr_to_const_t<Other> || is_ptr_to_const_t<MatrixPtrT>>>
 		CSRIterator(const CSRIterator<Other>& other) :
 			_CSRIteratorBase<MatrixPtrT>(other)
@@ -867,10 +876,10 @@ namespace SMM {
 	template<typename MatrixPtrT>
 	inline CSRIterator<MatrixPtrT>::CSRIterator(
 		MatrixPtrT m,
-		const int currentStartIndex,
-		const int currentPositionIndex
+		const int currentRow,
+		const int columnPointer
 	) noexcept :
-		_CSRIteratorBase<MatrixPtrT>(m, currentStartIndex, currentPositionIndex)
+		_CSRIteratorBase<MatrixPtrT>(m, currentRow, columnPointer)
 	{
 
 	}
@@ -1316,7 +1325,7 @@ namespace SMM {
 		start(nullptr),
 		denseRowCount(0),
 		denseColCount(0),
-		firstActiveStart(-1)
+		firstActiveStart(0)
 	{ }
 
 	template<typename T>
@@ -1333,6 +1342,7 @@ namespace SMM {
 
 	template<typename T>
 	inline int CSRMatrix<T>::init(const TripletMatrix<T>& triplet) noexcept {
+		firstActiveStart = -1;
 		denseRowCount = triplet.getDenseRowCount();
 		denseColCount = triplet.getDenseColCount();
 		const int nnz = triplet.getNonZeroCount();
@@ -1357,7 +1367,7 @@ namespace SMM {
 
 	template<typename T>
 	inline int CSRMatrix<T>::getNonZeroCount() const noexcept {
-		return start[getDenseRowCount()];
+		return start == nullptr ? 0 : start[getDenseRowCount()];
 	}
 
 	template<typename T>
@@ -1398,7 +1408,7 @@ namespace SMM {
 	
 	template<typename T>
 	inline typename CSRMatrix<T>::ConstIterator CSRMatrix<T>::begin() const noexcept {
-		return ConstIterator(this, firstActiveStart, 0);
+		return cbegin();
 	}
 
 	template<typename T>
@@ -1408,17 +1418,19 @@ namespace SMM {
 
 	template<typename T>
 	inline typename CSRMatrix<T>::Iterator CSRMatrix<T>::end() noexcept {
-		return Iterator(this, denseRowCount, start[denseRowCount]);
+		const int columnPointer = getNonZeroCount();
+		return Iterator(this, denseRowCount, columnPointer);
 	}
 
 	template<typename T>
 	inline typename CSRMatrix<T>::ConstIterator CSRMatrix<T>::end() const noexcept {
-		return ConstIterator(this, denseRowCount, start[denseRowCount]);
+		return cend();
 	}
 
 	template<typename T>
 	inline typename CSRMatrix<T>::ConstIterator CSRMatrix<T>::cend() const noexcept {
-		return ConstIterator(this, denseRowCount, start[denseRowCount]);
+		const int columnPointer = getNonZeroCount();
+		return ConstIterator(this, denseRowCount, columnPointer);
 	}
 
 	template<typename T>

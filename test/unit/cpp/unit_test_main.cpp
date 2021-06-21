@@ -532,10 +532,31 @@ TYPED_TEST(CSMatrixRMultSub, Basic) {
 // ===================== COMPRESSED SPARSE ROW MATRIX  ======================
 // ==========================================================================
 
-TYPED_TEST(CSRMatrixTest, CSRMatrixEmptyConstForwardIterator) {
-	SMM::TripletMatrix<TypeParam> triplet(10, 10);
-	SMM::CSRMatrix csr(triplet);
-	EXPECT_TRUE(csr.begin() == csr.end());
+// Test begin and end iterator when the matrix was initialized with empty triplet matrix
+TYPED_TEST(CSRMatrixTest, CSRMatrixFromEmptyTripletIt) {
+	{
+		SMM::TripletMatrix<TypeParam> triplet(10, 10);
+		SMM::CSRMatrix<TypeParam> csr(triplet);
+		EXPECT_TRUE(csr.begin() == csr.end());
+		EXPECT_TRUE(csr.cbegin() == csr.cend());
+	}
+}
+
+// Test begin and end iterator when the matrix was constructed with the default constructor and left empy
+TYPED_TEST(CSRMatrixTest, CSRMatrixEmptyIt) {
+	{
+		SMM::CSRMatrix<TypeParam> csr;
+		EXPECT_TRUE(csr.begin() == csr.end());
+		EXPECT_TRUE(csr.cbegin() == csr.cend());
+	}
+}
+
+// Test begin and end iterator when const matrix was constructed with the default constructor and left empy
+TYPED_TEST(CSRMatrixTest, CSRMatrixEmptyConstIt) {
+	{
+		const SMM::CSRMatrix<TypeParam> csr;
+		EXPECT_TRUE(csr.begin() == csr.end());
+	}
 }
 
 TYPED_TEST(CSRMatrixTest, CSRMatrixConstForwardIterator) {
