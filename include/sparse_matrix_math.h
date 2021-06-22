@@ -91,7 +91,7 @@ namespace SMM {
 		void deinit() noexcept;
 
 		/// @returns The number of elements in the vector
-		const int getSize() const;
+		int getSize() const;
 
 		/// Cast the vector to a pointer of the underlying type
 		operator T*();
@@ -167,8 +167,8 @@ namespace SMM {
 
 	template<typename T>
 	inline Vector<T>::Vector() noexcept :
-		size(0),
-		data(nullptr)
+		data(nullptr),
+		size(0)
 	{ }
 
 	template<typename T>
@@ -239,7 +239,7 @@ namespace SMM {
 	}
 
 	template<typename T>
-	inline const int Vector<T>::getSize() const {
+	inline int Vector<T>::getSize() const {
 		return this->size;
 	}
 
@@ -374,15 +374,15 @@ namespace SMM {
 		TripletEl(TripletEl&&) noexcept = default;
 		TripletEl& operator=(TripletEl&& other) = default;
 
-		const bool operator==(const TripletEl& other) const {
+		bool operator==(const TripletEl& other) const {
 			return it == other.it;
 		}
 
-		const int getRow() const noexcept {
+		int getRow() const noexcept {
 			return it->first >> 32;
 		}
 
-		const int getCol() const noexcept {
+		int getCol() const noexcept {
 			return it->first & 0xFFFFFFFF;
 		}
 
@@ -418,11 +418,11 @@ namespace SMM {
 
 		TripletMatrixConstIterator& operator=(const TripletMatrixConstIterator&) = default;
 
-		const bool operator==(const TripletMatrixConstIterator& other) const noexcept {
+		bool operator==(const TripletMatrixConstIterator& other) const noexcept {
 			return currentEl == other.currentEl;
 		}
 
-		const bool operator!=(const TripletMatrixConstIterator& other) const noexcept {
+		bool operator!=(const TripletMatrixConstIterator& other) const noexcept {
 			return !(*this == other);
 		}
 
@@ -553,13 +553,21 @@ namespace SMM {
 	{ }
 
 	template<typename Container, typename T>
-	inline _TripletMatrixCommon<Container, T>::_TripletMatrixCommon(int denseRowCount, int denseColCount, int numTriplets) noexcept :
+	inline _TripletMatrixCommon<Container, T>::_TripletMatrixCommon(
+		int denseRowCount,
+		int denseColCount,
+		[[maybe_unused]]int numTriplets
+	) noexcept :
 		denseRowCount(denseRowCount),
 		denseColCount(denseColCount)
 	{ }
 
 	template<typename Container, typename T>
-	inline void _TripletMatrixCommon<Container, T>::init(const int denseRowCount, const int denseColCount, const int numTriplets) {
+	inline void _TripletMatrixCommon<Container, T>::init(
+		const int denseRowCount,
+		const int denseColCount,
+		[[maybe_unused]]const int numTriplets
+	) {
 		assert(getNonZeroCount() == 0 && getDenseRowCount() == 0 && getDenseColCount() == 0);
 		this->denseRowCount = denseRowCount;
 		this->denseColCount = denseColCount;
@@ -679,8 +687,8 @@ namespace SMM {
 			friend class _CSRIteratorBase<MatrixPtrT>;
 			friend class _CSRIteratorBase<make_ptr_to_const_t<MatrixPtrT>>;
 			const el_value_type getValue() const noexcept;
-			const int getRow() const noexcept;
-			const int getCol() const noexcept;
+			int getRow() const noexcept;
+			int getCol() const noexcept;
 			void setValue(el_value_type value) noexcept;
 			friend void swap(CSRElement& a, CSRElement& b) noexcept;
 			CSRElement(
@@ -691,7 +699,7 @@ namespace SMM {
 
 			CSRElement(const CSRElement&) = default;
 			CSRElement& operator=(const CSRElement&) = default;
-			const bool operator==(const CSRElement&) const;
+			bool operator==(const CSRElement&) const;
 
 		protected:
 			/// Pointer to the sparse matrix whose element this is
@@ -720,8 +728,8 @@ namespace SMM {
 
 		_CSRIteratorBase(const _CSRIteratorBase&) = default;
 		_CSRIteratorBase& operator=(const _CSRIteratorBase&) = default;
-		const bool operator==(const _CSRIteratorBase& other) const noexcept;
-		const bool operator!=(const _CSRIteratorBase& other) const noexcept;
+		bool operator==(const _CSRIteratorBase& other) const noexcept;
+		bool operator!=(const _CSRIteratorBase& other) const noexcept;
 		reference operator*() const;
 		pointer operator->() const;
 		reference operator*();
@@ -783,12 +791,12 @@ namespace SMM {
 	}
 
 	template<typename MatrixPtrT>
-	inline const bool _CSRIteratorBase<MatrixPtrT>::operator==(const _CSRIteratorBase<MatrixPtrT>& other) const noexcept {
+	inline bool _CSRIteratorBase<MatrixPtrT>::operator==(const _CSRIteratorBase<MatrixPtrT>& other) const noexcept {
 		return currentElement == other.currentElement;
 	}
 
 	template<typename MatrixPtrT>
-	inline const bool _CSRIteratorBase<MatrixPtrT>::operator!=(const _CSRIteratorBase<MatrixPtrT>& other) const noexcept {
+	inline bool _CSRIteratorBase<MatrixPtrT>::operator!=(const _CSRIteratorBase<MatrixPtrT>& other) const noexcept {
 		return !(*this == other);
 	}
 
@@ -816,12 +824,12 @@ namespace SMM {
 	}
 
 	template<typename MatrixPtrT>
-	inline const int _CSRIteratorBase<MatrixPtrT>::CSRElement::getRow() const noexcept {
+	inline int _CSRIteratorBase<MatrixPtrT>::CSRElement::getRow() const noexcept {
 		return currentStartIndex;
 	}
 
 	template<typename MatrixPtrT>
-	inline const int _CSRIteratorBase<MatrixPtrT>::CSRElement::getCol() const noexcept {
+	inline int _CSRIteratorBase<MatrixPtrT>::CSRElement::getCol() const noexcept {
 		return m->positions[currentPositionIndex];
 	}
 
@@ -837,7 +845,7 @@ namespace SMM {
 	}
 
 	template<typename MatrixPtrT>
-	inline const bool _CSRIteratorBase<MatrixPtrT>::CSRElement::operator==(const _CSRIteratorBase<MatrixPtrT>::CSRElement& other) const {
+	inline bool _CSRIteratorBase<MatrixPtrT>::CSRElement::operator==(const _CSRIteratorBase<MatrixPtrT>::CSRElement& other) const {
 		return m == other.m&&
 			other.currentStartIndex == currentStartIndex &&
 			other.currentPositionIndex == currentPositionIndex;
@@ -1160,7 +1168,7 @@ namespace SMM {
 
 		/// Identity preconditioner. Does nothing, but implements the interface
 		class IDPreconditioner {
-			int apply(const T* rhs, T* x) const noexcept {
+			int apply([[maybe_unused]]const T* rhs, [[maybe_unused]]T* x) const noexcept {
 				return 0;
 			}
 		};
@@ -1176,7 +1184,7 @@ namespace SMM {
 			/// @param[in] rhs Vector which will be preconditioned
 			/// @param[out] x The result of preconditioning rhs
 			/// @retval Non zero on error
-			const int apply(const T* rhs, T* x) const noexcept;
+			int apply(const T* rhs, T* x) const noexcept;
 		private:
 			const CSRMatrix<T>& m;
 		};
@@ -1192,8 +1200,8 @@ namespace SMM {
 			/// @param[in] rhs Vector which will be preconditioned
 			/// @param[out] x The result of preconditioning rhs
 			/// @retval Non zero on error
-			const int apply(const T* rhs, T* x) const noexcept;
-			const int validate() noexcept;
+			int apply(const T* rhs, T* x) const noexcept;
+			int validate() noexcept;
 		private:
 			/// Uses the reference to the original matrix m in order to create the LU facroization
 			/// The values for both L and U will be written in ilo0Val array, the ones whic usually
@@ -1254,12 +1262,12 @@ namespace SMM {
 		/// Index in start array. The first row which has nonzero element in it.
 		int firstActiveStart;
 		/// Fill start, positions and values array. The arrays must be allocated with the right sizes before this is called.
-		const int fillArrays(const TripletMatrix<T>& triplet) noexcept;
+		int fillArrays(const TripletMatrix<T>& triplet) noexcept;
 		/// Get the next row which has at least one element in it
 		/// @param[in] currentStartIndex The current row
 		/// @param[in] startLength The length of the start array (same as the number of rows)
 		/// @returns The next non empty row
-		const int getNextStartIndex(int currentStartIndex, int startLength) const noexcept;
+		int getNextStartIndex(int currentStartIndex, int startLength) const noexcept;
 		/// @brief Generic function to which will perfrom out = op(lhs, A * mult).
 		/// It is allowed out to be the same pointer as lhs.
 		/// @tparam FunctorType type for a functor implementing operator(real* lhs, real* rhs)
@@ -1615,7 +1623,7 @@ namespace SMM {
 #endif
 
 	template<typename T>
-	inline const int CSRMatrix<T>::getNextStartIndex(int currentStartIndex, int startLength) const noexcept {
+	inline int CSRMatrix<T>::getNextStartIndex(int currentStartIndex, int startLength) const noexcept {
 		do {
 			currentStartIndex++;
 		} while (currentStartIndex < startLength && start[currentStartIndex] == start[currentStartIndex + 1]);
@@ -1704,7 +1712,7 @@ namespace SMM {
 	}
 
 	template<typename T>
-	inline const int CSRMatrix<T>::fillArrays(const TripletMatrix<T>& triplet) noexcept {
+	inline int CSRMatrix<T>::fillArrays(const TripletMatrix<T>& triplet) noexcept {
 		const int n = getDenseRowCount();
 		std::unique_ptr<int[], decltype(&free)> count(static_cast<int*>(calloc(n, sizeof(int))), &free);
 		if (count == nullptr) {
@@ -1756,7 +1764,7 @@ namespace SMM {
 	{}
 
 	template<typename T>
-	inline const int CSRMatrix<T>::SGSPreconditioner::apply(const T* rhs, T* x) const noexcept {
+	inline int CSRMatrix<T>::SGSPreconditioner::apply(const T* rhs, T* x) const noexcept {
 		// The symmetric Gaus-Seidel comes in the form M = (D + L)D^-1(D + U)
 		// We want to find x=M^{-1}rhs, note however that (D + L) is lower triangular matrix
 		// D^-1(D + U) is upper trianguar matrix, thus it can be rewritten as Mx=rhs and solved in two
@@ -1819,7 +1827,7 @@ namespace SMM {
 	{	}
 
 	template<typename T>
-	inline const int CSRMatrix<T>::ILU0Preconditioner::validate() noexcept {
+	inline int CSRMatrix<T>::ILU0Preconditioner::validate() noexcept {
 		return factorize();
 	}
 
