@@ -38,6 +38,9 @@ namespace SMM {
 	}
 
 	template<typename T>
+	using do_not_deduce = std::common_type_t<T>;
+
+	template<typename T>
 	class Vector {
 	public:
 
@@ -54,7 +57,7 @@ namespace SMM {
 		/// Construct a vector of given size and set all values to the specified value
 		/// @param[in] size The size of the vector
 		/// @param[in] val The the value which all elements of the vectori will take
-		Vector(const int size, const T val) noexcept;
+		Vector(const int size, const do_not_deduce<T> val) noexcept;
 
 		/// Construct a vector from initializer list. The vector will have size as the initializer
 		/// and all elements will be copied
@@ -178,7 +181,7 @@ namespace SMM {
 	{ }
 
 	template<typename T>
-	inline Vector<T>::Vector(const int size, const T val) noexcept :
+	inline Vector<T>::Vector(const int size, const do_not_deduce<T> val) noexcept :
 		size(size)
 	{
 		initDataWithVal(val);
