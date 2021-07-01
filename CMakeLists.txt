@@ -73,7 +73,7 @@ install(FILES ${PROJECT_SOURCE_DIR}/include/sparse_matrix_math.h DESTINATION inc
 
 
 # Unit tests setup
-set(SMM_UNIT_TESTS ON CACHE BOOL "Should add unit test solution to the project")
+set(SMM_UNIT_TESTS OFF CACHE BOOL "Should add unit test solution to the project")
 if(${SMM_UNIT_TESTS})
 	add_subdirectory("test" "test")
 endif()
