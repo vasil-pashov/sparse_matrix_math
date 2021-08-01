@@ -13,12 +13,16 @@
 #include <cstring>
 #include <algorithm>
 
-#ifdef SMM_MULTITHREADING_CPPTM
-#include <cpp_tm/cpp_tm.h>
-#if CPP_TM_MAJOR_VERSION != 0 || CPP_TM_MINOR_VERSION != 2
-#error "Expected verson 0.2 of cpp_tm library"
+#if defined(SMM_MULTITHREADING_CPPTM)
+	#include <cpp_tm/cpp_tm.h>
+	#if CPP_TM_MAJOR_VERSION != 0 || CPP_TM_MINOR_VERSION != 2
+		#error "Expected verson 0.2 of cpp_tm library"
+	#endif
+#elif defined(SMM_MULTITHREADING_TBB)
+	#include <tbb/blocked_range.h>
+	#include <tbb/parallel_reduce.h>
+	#include <tbb/parallel_for.h>
 #endif
-#endif // SMM_MULTITHREADING_CPPTM
 
 #define SMM_MAJOR_VERSION 0
 #define SMM_MINOR_VERSION 2
@@ -1491,28 +1495,39 @@ namespace SMM {
 		T* const out,
 		const FunctorType& op
 	) const noexcept {
-		int prevRow = 0;
-		for (int row = firstActiveStart; row < denseRowCount; row = getNextStartIndex(row, denseRowCount)) {
-			T dot = 0.0;
-			// Handles the case when rows are missing from the matrix
-			// Makes sense only for vector multiplication as when there is addition or subtraction
-			// the out vector holds the correct result
-			if constexpr(std::is_same_v<decltype(op), decltype(vectorMultFunctor)>) {
-				for(int i = prevRow; i < row; ++i) {
-					out[i] = op(lhs[row], T(0));
+		auto iterateRows = [&](
+			#ifdef SMM_MULTITHREADING_TBB
+				const tbb::blocked_range<int>& range
+			#endif
+		) {
+			#ifdef SMM_MULTITHREADING_TBB
+				const int startRow = range.begin();
+				const int endRow = range.end();
+			#else
+				const int startRow = 0;
+				const int endRow = denseRowCount;
+			#endif
+			for(int row = startRow; row < endRow; row++) {
+				while(start[row] == start[row + 1]) {
+					out[row] = op(lhs[row], 0);
+					row++;
+					if(row == endRow) return;
 				}
+				T dot(0);
+				for (int colIdx = start[row]; colIdx < start[row + 1]; ++colIdx) {
+					const int col = positions[colIdx];
+					const T val = values[colIdx];
+					dot = _smm_fma(val, mult[col], dot);
+				}
+				out[row] = op(lhs[row], dot);
 			}
+		};
+#ifdef SMM_MULTITHREADING_TBB
+		tbb::parallel_for(tbb::blocked_range<int>(0, denseRowCount), iterateRows);
+#else
+		iterateRows();
+#endif
 
-			// Does the regular operation
-			for (int colIdx = start[row]; colIdx < start[row + 1]; ++colIdx) {
-				const int col = positions[colIdx];
-				const T val = values[colIdx];
-				dot = _smm_fma(val, mult[col], dot);
-			}
-			out[row] = op(lhs[row], dot);
-			// Add one to exclude the row which was just processed
-			prevRow = row + 1;
-		}
 	}
 
 	template<typename T>
@@ -2522,8 +2537,8 @@ namespace SMM {
 		T residualNormSquared = 0;
 		for(int i = 0; i < rows; ++i) {
 			rz += r[i] * z[i];
-			p[i] = z[i];
 			residualNormSquared += r[i] * r[i];
+			p[i] = z[i];
 		}
 		if(epsSuared > residualNormSquared) {
 			return SolverStatus::SUCCESS;
