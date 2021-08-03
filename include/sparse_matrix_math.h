@@ -179,9 +179,9 @@ namespace SMM {
 	{ }
 
 	template<typename T>
-	inline Vector<T>::Vector(const int size) noexcept :
-		size(size),
-		data(static_cast<T*>(malloc(size * sizeof(T))))
+	inline Vector<T>::Vector(const int sizeIn) noexcept :
+		data(static_cast<T*>(malloc(sizeIn * sizeof(T)))),
+		size(sizeIn)
 	{ }
 
 	template<typename T>
@@ -494,6 +494,8 @@ namespace SMM {
 		_TripletMatrixCommon& operator=(_TripletMatrixCommon&&) = default;
 		_TripletMatrixCommon(const _TripletMatrixCommon&) = delete;
 		_TripletMatrixCommon& operator=(const _TripletMatrixCommon&) = delete;
+		/// Multiply each value in the matrix by the scalar inplace
+		_TripletMatrixCommon<Container, T>& operator*=(const T scalar) noexcept;
 		/// @brief Initialize triplet matrix.
 		/// Be sure to call this on empty matrices (either created via the default constructor or after calling deinit())
 		/// @param[in] rowCount Number of rows which the dense form of the matrix is supposed to have
@@ -653,17 +655,19 @@ namespace SMM {
 		return denseColCount;
 	}
 
+	template<typename Container, typename T>
+	inline _TripletMatrixCommon<Container, T>& _TripletMatrixCommon<Container, T>::operator*=(const T scalar) noexcept {
+		for(auto& kv : data) {
+			kv.second *= scalar;
+		}
+		return *this;
+	}
+
 	template<typename T>
 	using TripletMatrix = _TripletMatrixCommon<std::map<uint64_t, T>, T>;
 
 	template<typename T>
 	using UnorderedTripletMatrix = _TripletMatrixCommon<std::unordered_map<uint64_t, T>, T>;
-
-	enum CSFormat {
-		CSR, ///< (C)ompressed (S)parse (R)ow
-		CSC ///< (C)ompressed (S)parse (C)olumn
-	};
-
 
 	template<typename T>
 	struct is_ptr_to_const : std::conjunction<
