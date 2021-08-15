@@ -19,12 +19,16 @@ endif()
 
 # Multithreading setup
 set(SMM_MULTITHREADING "None" CACHE STRING "Which library to use for multuthreading.")
-set_property(CACHE SMM_MULTITHREADING PROPERTY STRINGS None CPPTM)
+set_property(CACHE SMM_MULTITHREADING PROPERTY STRINGS None CPPTM TBB)
 if("${SMM_MULTITHREADING}" STREQUAL "CPPTM")
     set(CPPTM_VERSION 0.2.0)
 	find_package(cpp_tm ${CPPTM_VERSION} REQUIRED CONFIG)
 	target_link_libraries(${PROJECT_NAME} INTERFACE cpp_tm::cpp_tm)
-	target_compile_definitions(${PROJECT_NAME} INTERFACE SMM_MULTITHREADING_CPPTM)
+	target_compile_definitions(${PROJECT_NAME} INTERFACE -DSMM_MULTITHREADING_CPPTM)
+elseif("${SMM_MULTITHREADING}" STREQUAL "TBB")
+	find_package(TBB REQUIRED CONFIG)
+	target_link_libraries(${PROJECT_NAME} INTERFACE TBB::tbb)
+	target_compile_definitions(${PROJECT_NAME} INTERFACE -DSMM_MULTITHREADING_TBB)
 endif()
 
 target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_17)
