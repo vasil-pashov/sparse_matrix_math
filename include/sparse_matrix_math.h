@@ -306,11 +306,26 @@ namespace SMM {
 	template<typename T>
 	inline const T Vector<T>::operator*(const Vector<T>& other) const {
 		assert(other.size == size);
+#ifdef SMM_MULTITHREADING_TBB
+		const int dotProductGrainSize = 8192;
+		return tbb::parallel_deterministic_reduce(
+				tbb::blocked_range<int>(0, size, dotProductGrainSize),
+				0.0f,
+				[&](const tbb::blocked_range<int>& range, T current) {
+					for(int j = range.begin(); j < range.end(); ++j) {
+						current += data[j] * other[j];
+					}
+					return current;
+				},
+				std::plus<T>()
+			);
+#else
 		T dot(0);
 		for (int i = 0; i < size; ++i) {
 			dot += other[i] * data[i];
 		}
 		return dot;
+#endif
 	}
 
 	template<typename T>
@@ -2450,26 +2465,8 @@ namespace SMM {
 		a.rMultSub(b, x0, r);
 
 		Vector<T> p(rows), Ap(rows, T(0));
-		T residualNormSquared = 0;
 		std::copy(r.begin(), r.end(), p.begin());
-#ifdef SMM_MULTITHREADING_TBB
-		const int dotProductGrainSize = 8192;
-		residualNormSquared = tbb::parallel_deterministic_reduce(
-			tbb::blocked_range<int>(0, rows, dotProductGrainSize),
-			0.0f,
-			[&](const tbb::blocked_range<int>& range, T current) {
-				for(int j = range.begin(); j < range.end(); ++j) {
-					current += r[j] * r[j];
-				}
-				return current;
-			},
-			std::plus<T>()
-		);
-#else
-		for(int i = 0; i < rows; ++i) {
-			residualNormSquared += r[i] * r[i];
-		}
-#endif
+		T residualNormSquared = r * r;
 		if(epsSuared > residualNormSquared) {
 			return SolverStatus::SUCCESS;
 		}
@@ -2497,17 +2494,7 @@ namespace SMM {
 					r[j] = _smm_fma(-alpha, Ap[j], r[j]);
 				}
 			});
-			newResidualNormSquared = tbb::parallel_deterministic_reduce(
-				tbb::blocked_range<int>(0, rows, dotProductGrainSize),
-				0.0f,
-				[&](const tbb::blocked_range<int>& range, T current) {
-					for(int j = range.begin(); j < range.end(); ++j) {
-						current += r[j] * r[j];
-					}
-					return current;
-				},
-				std::plus<T>()
-			);
+			newResidualNormSquared = r * r;
 #else
 			for(int j = 0; j < rows; ++j) {
 				x[j] = _smm_fma(alpha, p[j], currentX[j]);
