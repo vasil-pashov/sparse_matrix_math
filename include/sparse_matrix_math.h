@@ -2451,10 +2451,25 @@ namespace SMM {
 
 		Vector<T> p(rows), Ap(rows, T(0));
 		T residualNormSquared = 0;
+		std::copy(r.begin(), r.end(), p.begin());
+#ifdef SMM_MULTITHREADING_TBB
+		const int dotProductGrainSize = 8192;
+		residualNormSquared = tbb::parallel_deterministic_reduce(
+			tbb::blocked_range<int>(0, rows, dotProductGrainSize),
+			0.0f,
+			[&](const tbb::blocked_range<int>& range, T current) {
+				for(int j = range.begin(); j < range.end(); ++j) {
+					current += r[j] * r[j];
+				}
+				return current;
+			},
+			std::plus<T>()
+		);
+#else
 		for(int i = 0; i < rows; ++i) {
-			p[i] = r[i];
 			residualNormSquared += r[i] * r[i];
 		}
+#endif
 		if(epsSuared > residualNormSquared) {
 			return SolverStatus::SUCCESS;
 		}
@@ -2475,11 +2490,31 @@ namespace SMM {
 			// x = x + alpha * p
 			// r = r - alpha * Ap
 			T newResidualNormSquared = 0;
+#ifdef SMM_MULTITHREADING_TBB
+			tbb::parallel_for(tbb::blocked_range<int>(0, rows),[&](const tbb::blocked_range<int>& range) {
+				for(int j = range.begin(); j < range.end(); ++j) {
+					x[j] = _smm_fma(alpha, p[j], currentX[j]);
+					r[j] = _smm_fma(-alpha, Ap[j], r[j]);
+				}
+			});
+			newResidualNormSquared = tbb::parallel_deterministic_reduce(
+				tbb::blocked_range<int>(0, rows, dotProductGrainSize),
+				0.0f,
+				[&](const tbb::blocked_range<int>& range, T current) {
+					for(int j = range.begin(); j < range.end(); ++j) {
+						current += r[j] * r[j];
+					}
+					return current;
+				},
+				std::plus<T>()
+			);
+#else
 			for(int j = 0; j < rows; ++j) {
 				x[j] = _smm_fma(alpha, p[j], currentX[j]);
 				r[j] = _smm_fma(-alpha, Ap[j], r[j]);
 				newResidualNormSquared += r[j] * r[j];
 			}
+#endif
 			if(epsSuared > newResidualNormSquared) {
 				return SolverStatus::SUCCESS;
 			}
@@ -2487,9 +2522,17 @@ namespace SMM {
 			const T beta = newResidualNormSquared / residualNormSquared;
 			residualNormSquared = newResidualNormSquared;
 			// p = r + beta * p
+#ifdef SMM_MULTITHREADING_TBB
+			tbb::parallel_for(tbb::blocked_range<int>(0, rows),[&](const tbb::blocked_range<int>& range){
+				for(int j = range.begin(); j < range.end(); ++j) {
+					p[j] = _smm_fma(beta, p[j], r[j]);
+				}
+			});
+#else
 			for(int j = 0; j < rows; ++j) {
 				p[j] = _smm_fma(beta, p[j], r[j]);
 			}
+#endif
 			currentX = x;
 		}
 		return SolverStatus::MAX_ITERATIONS_REACHED;
