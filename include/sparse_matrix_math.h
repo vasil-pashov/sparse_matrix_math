@@ -2594,25 +2594,38 @@ namespace SMM {
 			const T alpha = rz / pAp;
 			// x_{j+1} = x_j + alpha_j * p_j
 			// r_{j+1} = r_j - alpha_j * A.p_j
+#ifdef SMM_MULTITHREADING_TBB
+			tbb::parallel_for(tbb::blocked_range<int>(0, rows),[&](const tbb::blocked_range<int>& range) {
+				for(int j = range.begin(); j < range.end(); ++j) {
+					x[j] = _smm_fma(alpha, p[j], currentX[j]);
+					r[j] = _smm_fma(-alpha, Ap[j], r[j]);
+				}
+			});
+#else
 			for(int j = 0; j < rows; ++j) {
 				x[j] = _smm_fma(alpha, p[j], currentX[j]);
 				r[j] = _smm_fma(-alpha, Ap[j], r[j]);
 			}
+#endif
 			M.apply(r, z);
-			T newRZ = 0;
-			residualNormSquared = 0;
-			for(int j = 0; j < rows; ++j) {
-				newRZ += r[j] * z[j];
-				residualNormSquared += r[j] * r[j];
-			}
+			T newRZ = r * z;
+			residualNormSquared = r * r;
 			if(epsSuared > residualNormSquared) {
 				return SMM::SolverStatus::SUCCESS;
 			}
 			const T beta = newRZ / rz;
 			// p_{j+1} = z_{j+1} + beta_j * p_j
+#ifdef SMM_MULTITHREADING_TBB
+			tbb::parallel_for(tbb::blocked_range<int>(0, rows),[&](const tbb::blocked_range<int>& range) {
+				for(int j = range.begin(); j < range.end(); ++j) {
+					p[j] = _smm_fma(beta, p[j], z[j]);
+				}
+			});
+#else
 			for(int j = 0; j < rows; ++j) {
 				p[j] = _smm_fma(beta, p[j], z[j]);
 			}
+#endif
 			rz = newRZ;
 			currentX = x;
 		}
