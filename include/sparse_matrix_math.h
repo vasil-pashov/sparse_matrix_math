@@ -164,6 +164,10 @@ namespace SMM {
 		/// @param[in] value The to which all elements will be set
 		void fill(const T value);
 
+		void swap(Vector<T>& other) {
+			std::swap(data, other.data);
+			std::swap(size, other.size);
+		}
 	private:
 		/// Allocate new memory for the vector and set all elements to val
 		void initDataWithVal(const T val);
