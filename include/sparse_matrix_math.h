@@ -13,12 +13,7 @@
 #include <cstring>
 #include <algorithm>
 
-#if defined(SMM_MULTITHREADING_CPPTM)
-	#include <cpp_tm/cpp_tm.h>
-	#if CPP_TM_MAJOR_VERSION != 0 || CPP_TM_MINOR_VERSION != 2
-		#error "Expected verson 0.2 of cpp_tm library"
-	#endif
-#elif defined(SMM_MULTITHREADING_TBB)
+#if defined(SMM_MULTITHREADING)
 	#include <tbb/blocked_range.h>
 	#include <tbb/parallel_reduce.h>
 	#include <tbb/parallel_for.h>
@@ -310,7 +305,7 @@ namespace SMM {
 	template<typename T>
 	inline const T Vector<T>::operator*(const Vector<T>& other) const {
 		assert(other.size == size);
-#ifdef SMM_MULTITHREADING_TBB
+#ifdef SMM_MULTITHREADING
 		const int dotProductGrainSize = 8192;
 		return tbb::parallel_deterministic_reduce(
 				tbb::blocked_range<int>(0, size, dotProductGrainSize),
@@ -1164,35 +1159,6 @@ namespace SMM {
 		bool addEntry(const int row, const int col, const T value);
 
 		// ********************************************************************
-		// *********** MULTITHREADED VARIANTS OF MATRIX FUNCTIONS *************
-		// ********************************************************************
-		#if defined(SMM_MULTITHREADING_CPPTM)
-		/// @brief Perform matrix vector multiplication out = A * mult in a multithreaded fashion.
-		/// Where A is the current CSR matrix
-		/// @param[in] mult The vector which will multiply the matrix to the right
-		/// @param[out] out Preallocated vector where the result is stored
-		/// @param[in, out] tm The thred manager which will run the multithreaded job
-		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
-		void rMult(const T* const mult, T* const out, CPPTM::ThreadManager& tm, const bool async) const noexcept;
-		/// @brief Perform matrix vector multiplication and addition: out = lhs + A * mult in a multithreaded fashion.
-		/// Where A is the current CSR matrix
-		/// @param[in] lhs The vector which will be added to the matrix vector product A * mult
-		/// @param[in] mult The vector which will multiply the matrix to the right
-		/// @param[out] out Preallocated vector where the result is stored
-		/// @param[in, out] tm The thred manager which will run the multithreaded job
-		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
-		void rMultAdd(const T* const lhs, const T* const mult, T* const out, CPPTM::ThreadManager& tm, const bool async) const noexcept;
-		/// @brief Perform matrix vector multiplication and subtraction: out = lhs - A * mult
-		/// Where A is the current CSR matrix
-		/// @param[in] lhs The vector from which the matrix vector product A * mult will be subtracted
-		/// @param[in] mult The vector which will multiply the matrix to the right
-		/// @param[out] out Preallocated vector where the result is stored
-		/// @param[in, out] tm The thred manager which will run the multithreaded job
-		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
-		void rMultSub(const T* const lhs, const T* const mult, T* const out, CPPTM::ThreadManager& tm, const bool async) const noexcept;
-		#endif
-
-		// ********************************************************************
 		// ************************ PRECONDITIONERS ***************************
 		// ********************************************************************
 
@@ -1314,27 +1280,6 @@ namespace SMM {
 		/// @param[in] col The column of the element
 		/// @returns The index of the element in positions/values, or -1 if there is no element at (row, col)
 		int getValueIndex(const int row, const int col) const;
-
-		#if defined(SMM_MULTITHREADING_CPPTM)
-		/// @brief Generic function to which will perfrom out = op(lhs, A * mult).
-		/// It is allowed out to be the same pointer as lhs.
-		/// @tparam FunctorType type for a functor implementing operator(real* lhs, real* rhs)
-		/// @param[in] lhs Left hand side operand.
-		/// @param[in] mult The vector which will multiply the matrix (to the right).
-		/// @param[out] out Preallocated vector where the result will be stored.
-		/// @param[in] op Functor which will execute op(lhs, A * mult) it must take in two real vectors.
-		/// @param[in] tm The thred manager which will run the multithreaded job
-		/// @param[in] async Whether to launch the operation in async mode or wait for it to finish.
-		template<typename FunctorType>
-		void rMultOp(
-			const T* const lhs,
-			const T* const mult,
-			T* const out,
-			const FunctorType& op,
-			CPPTM::ThreadManager& tm,
-			const bool async
-		) const noexcept;
-		#endif
 
 		static T vectorMultFunctor([[maybe_unused]]const T lhs, const T rhs) {
 			return rhs;
@@ -1519,11 +1464,11 @@ namespace SMM {
 		const FunctorType& op
 	) const noexcept {
 		auto iterateRows = [&](
-			#ifdef SMM_MULTITHREADING_TBB
+			#ifdef SMM_MULTITHREADING
 				const tbb::blocked_range<int>& range
 			#endif
 		) {
-			#ifdef SMM_MULTITHREADING_TBB
+			#ifdef SMM_MULTITHREADING
 				const int startRow = range.begin();
 				const int endRow = range.end();
 			#else
@@ -1545,7 +1490,7 @@ namespace SMM {
 				out[row] = op(lhs[row], dot);
 			}
 		};
-#ifdef SMM_MULTITHREADING_TBB
+#ifdef SMM_MULTITHREADING
 		tbb::parallel_for(tbb::blocked_range<int>(0, denseRowCount), iterateRows);
 #else
 		iterateRows();
@@ -1568,100 +1513,6 @@ namespace SMM {
 	inline void CSRMatrix<T>::rMultSub(const T* const lhs, const T* const mult, T* const out) const noexcept {
 		rMultOp(lhs, mult, out, [](const T lhs, const T rhs) { return lhs - rhs;});
 	}
- 
-
-// ********************************************************************
-// *********** MULTITHREADED VARIANTS OF MATRIX FUNCTIONS *************
-// ********************************************************************
-#ifdef SMM_MULTITHREADING_CPPTM
-
-	template<typename T>
-	template<typename FunctorType>
-	inline void CSRMatrix<T>::rMultOp(
-		const T* const lhs,
-		const T* const mult,
-		T* const out,
-		const FunctorType& op,
-		CPPTM::ThreadManager& tm,
-		const bool async
-	) const noexcept {
-		auto rMultOpTask = [&,this](const int blockIndex, const int numBlocks) {
-			const int blockSize = (denseRowCount + numBlocks) / numBlocks;
-			const int startIdx = blockSize * blockIndex;
-			const int end = std::min(denseRowCount, startIdx + blockSize);
-			const int start = startIdx == 0 ? firstActiveStart : getNextStartIndex(startIdx - 1, denseRowCount);
-			int prevRow = startIdx;
-			for (int row = start; row < end; row = getNextStartIndex(row, denseRowCount)) {
-				T dot = 0.0;
-				// Handles the case when rows are missing from the matrix
-				// Makes sense only for vector multiplication as when there is addition or subtraction
-				// the out vector holds the correct result
-				if constexpr(std::is_same_v<decltype(op), decltype(vectorMultFunctor)>) {
-					for(int i = prevRow; i < row; ++i) {
-						out[i] = op(lhs[row], T(0));
-					}
-				}
-				// Does the regular operation
-				for (int colIdx = this->start[row]; colIdx < this->start[row + 1]; ++colIdx) {
-					const int col = positions[colIdx];
-					const T val = values[colIdx];
-					dot = _smm_fma(val, mult[col], dot);
-				}
-				out[row] = op(lhs[row], dot);
-				// Add one to exclude the row which was just processed
-				prevRow = row + 1;
-			}
-		};
-		if (async) {
-			tm.launchAsync(std::move(rMultOpTask));
-		} else {
-			tm.launchSync(rMultOpTask);
-		}
-	}
-
-	template<typename T>
-	inline void CSRMatrix<T>::rMult(
-		const T* const mult,
-		T* const res,
-		CPPTM::ThreadManager& tm,
-		const bool async
-	) const noexcept {
-		assert(mult != res);
-		auto rhsId = [](const Т lhs, const  Т rhs) -> T {
-			return rhs;
-		};
-		rMultOp(res, mult, res, rhsId, tm, async);
-	}
-
-	template<typename T>
-	inline void CSRMatrix<T>::rMultAdd(
-		const T* const lhs,
-		const T* const mult,
-		T* const out,
-		CPPTM::ThreadManager& tm,
-		const bool async
-	) const noexcept {
-		auto addOp = [](const T lhs, const T rhs) -> T {
-			return lhs + rhs;
-		};
-		rMultOp(lhs, mult, out, addOp, tm, async);
-	}
-
-
-	template<typename T>
-	inline void CSRMatrix<T>::rMultSub(
-		const T* const lhs,
-		const T* const mult,
-		T* const out,
-		CPPTM::ThreadManager& tm,
-		const bool async
-	) const noexcept {
-		auto addOp = [](const T lhs, const T rhs) -> T {
-			return lhs - rhs;
-		};
-		rMultOp(lhs, mult, out, addOp, tm, async);
-	}
-#endif
 
 	template<typename T>
 	inline int CSRMatrix<T>::getNextStartIndex(int currentStartIndex, int startLength) const noexcept {
@@ -2491,7 +2342,7 @@ namespace SMM {
 			// x = x + alpha * p
 			// r = r - alpha * Ap
 			T newResidualNormSquared = 0;
-#ifdef SMM_MULTITHREADING_TBB
+#ifdef SMM_MULTITHREADING
 			tbb::parallel_for(tbb::blocked_range<int>(0, rows),[&](const tbb::blocked_range<int>& range) {
 				for(int j = range.begin(); j < range.end(); ++j) {
 					x[j] = _smm_fma(alpha, p[j], currentX[j]);
@@ -2513,7 +2364,7 @@ namespace SMM {
 			const T beta = newResidualNormSquared / residualNormSquared;
 			residualNormSquared = newResidualNormSquared;
 			// p = r + beta * p
-#ifdef SMM_MULTITHREADING_TBB
+#ifdef SMM_MULTITHREADING
 			tbb::parallel_for(tbb::blocked_range<int>(0, rows),[&](const tbb::blocked_range<int>& range){
 				for(int j = range.begin(); j < range.end(); ++j) {
 					p[j] = _smm_fma(beta, p[j], r[j]);
@@ -2598,7 +2449,7 @@ namespace SMM {
 			const T alpha = rz / pAp;
 			// x_{j+1} = x_j + alpha_j * p_j
 			// r_{j+1} = r_j - alpha_j * A.p_j
-#ifdef SMM_MULTITHREADING_TBB
+#ifdef SMM_MULTITHREADING
 			tbb::parallel_for(tbb::blocked_range<int>(0, rows),[&](const tbb::blocked_range<int>& range) {
 				for(int j = range.begin(); j < range.end(); ++j) {
 					x[j] = _smm_fma(alpha, p[j], currentX[j]);
@@ -2619,7 +2470,7 @@ namespace SMM {
 			}
 			const T beta = newRZ / rz;
 			// p_{j+1} = z_{j+1} + beta_j * p_j
-#ifdef SMM_MULTITHREADING_TBB
+#ifdef SMM_MULTITHREADING
 			tbb::parallel_for(tbb::blocked_range<int>(0, rows),[&](const tbb::blocked_range<int>& range) {
 				for(int j = range.begin(); j < range.end(); ++j) {
 					p[j] = _smm_fma(beta, p[j], z[j]);
