@@ -1,5 +1,10 @@
 [requires]
-gtest/1.10.0
+gtest/1.12.1
+onetbb/2021.3.0
 
 [generators]
 cmake_find_package_multi
+
+[imports]
+bin, *.dll -> ./
+lib, *.dylib* -> ./
