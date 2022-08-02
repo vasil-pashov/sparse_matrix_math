@@ -256,7 +256,7 @@ TEST_SUITE("CSRMatrix conversion") {
 }
 
 TEST_SUITE("CSRMatrix - Vector operations") {
-	TEST_CASE_TEMPLATE("CSRMatrix saxpy", TypeParam, float, double) {
+	TEST_CASE_TEMPLATE("CSRMatrix A * x + b", TypeParam, float, double) {
 		const int numRows = 5;
 		const int numCols = 4;
 		const int numElements = 10;
@@ -368,260 +368,499 @@ TEST_SUITE("CSRMatrix - Vector operations") {
 			}
 		}
 	}
-}
 
-#if 0
+	TEST_CASE_TEMPLATE("CSRMatrix b - A * x", TypeParam, float, double) {
+		const int numRows = 5;
+		const int numCols = 4;
+		const int numElements = 10;
+		SMM::TripletMatrix<TypeParam> triplet(numRows, numCols, numElements);
+		triplet.addEntry(0, 0, 4.5);
+		triplet.addEntry(0, 2, 3.2);
+		triplet.addEntry(1, 0, 3.1);
+		triplet.addEntry(1, 1, 2.9);
+		triplet.addEntry(1, 3, 0.9);
+		triplet.addEntry(2, 1, 1.7);
+		triplet.addEntry(2, 2, 3.0);
+		triplet.addEntry(3, 0, 3.5);
+		triplet.addEntry(3, 1, 0.4);
+		triplet.addEntry(3, 3, 1.0);
+		SMM::CSRMatrix<TypeParam> m;
+		m.init(triplet);
 
-TYPED_TEST_SUITE(CSMatrixRMultSub, MyTypes);
+		SUBCASE("b - A * x, A == 0, x !=0, b != 0") {
+			TypeParam mult[numRows] = {1,2,3,4};
+			TypeParam sub[numRows] = {5,6,7,8};
+			const TypeParam resRef[numRows] = {5,6,7,8};
+			SMM::TripletMatrix<TypeParam> emptyTriplet(4, 4, 10);
+			SMM::CSRMatrix emptyMatrix(emptyTriplet);
 
-TYPED_TEST(CSMatrixRMultSub, EmptyMatrix) {
-	const int numRows = CSMatrixRMultSub<TypeParam>::numRows;
-	TypeParam mult[numRows] = {1,2,3,4};
-	TypeParam add[numRows] = {5,6,7,8};
-	const TypeParam resRef[numRows] = {5,6,7,8};
-	SMM::TripletMatrix<TypeParam> emptyTriplet(4, 4, 10);
-	SMM::CSRMatrix emptyMatrix(emptyTriplet);
-	emptyMatrix.rMultSub(add, mult, add);
-	for (int i = 0; i < numRows; ++i) {
-		EXPECT_NEAR(resRef[i], add[i], 1e-6);
-	}
-}
+			SUBCASE("Result is inplace") {
+				emptyMatrix.rMultSub(sub, mult, sub);
+				for (int i = 0; i < numRows; ++i) {
+					CHECK_EQ(resRef[i], sub[i]);
+				}
+			}
 
-TYPED_TEST(CSMatrixRMultSub, SubMultZero) {
-	const int numRows = CSMatrixRMultSub<TypeParam>::numRows;
-	TypeParam mult[numRows] = {};
-	TypeParam add[numRows] = {};
-	const TypeParam resRef[numRows] = {};
-	CSMatrixRMultSub<TypeParam>::m.rMultSub(add, mult, add);
-	for (int i = 0; i < numRows; ++i) {
-		EXPECT_NEAR(resRef[i], add[i], 1e-6);
-	}
-}
+			SUBCASE("Result is separate vector") {
+				TypeParam res[numRows] = {};
+				emptyMatrix.rMultSub(sub, mult, res);
+				for (int i = 0; i < numRows; ++i) {
+					CHECK_EQ(resRef[i], res[i]);
+				}
+				// Check that the sub vector was not changed
+				CHECK_EQ(5, sub[0]);
+				CHECK_EQ(6, sub[1]);
+				CHECK_EQ(7, sub[2]);
+				CHECK_EQ(8, sub[3]);
+			}
+		}
 
-TYPED_TEST(CSMatrixRMultSub, SubZero) {
-	const int numRows = CSMatrixRMultSub<TypeParam>::numRows;
-	TypeParam mult[numRows] = {1,2,3,4};
-	TypeParam add[numRows] = {};
-	const TypeParam resRef[numRows] = {-14.1, -12.5, -12.4, -8.3};
-	CSMatrixRMultSub<TypeParam>::m.rMultSub(add, mult, add);
-	for (int i = 0; i < numRows; ++i) {
-		EXPECT_NEAR(resRef[i], add[i], 1e-6);
-	}
-}
+		SUBCASE("b - A * x, A != 0, x == 0, b == 0") {
+			TypeParam mult[numRows] = {};
+			TypeParam sub[numRows] = {};
+			const TypeParam resRef[numRows] = {};
 
-TYPED_TEST(CSMatrixRMultSub, MultZero) {
-	const int numRows = CSMatrixRMultSub<TypeParam>::numRows;
-	TypeParam mult[numRows] = {};
-	TypeParam add[numRows] = {5,6,7,8};
-	const TypeParam resRef[numRows] = {5,6,7,8};
-	CSMatrixRMultSub<TypeParam>::m.rMultSub(add, mult, add);
-	for (int i = 0; i < numRows; ++i) {
-		EXPECT_NEAR(resRef[i], add[i], 1e-6);
-	}
-}
+			SUBCASE("Result is inplace") {
+				m.rMultSub(sub, mult, sub);
+				for (int i = 0; i < numRows; ++i) {
+					CHECK_EQ(resRef[i], sub[i]);
+				}
+			}
 
-TYPED_TEST(CSMatrixRMultSub, Basic) {
-	const int numRows = CSMatrixRMultSub<TypeParam>::numRows;
-	TypeParam mult[numRows] = {1,0,3,4};
-	TypeParam add[numRows] = {5,6,7,8,10};
-	const TypeParam resRef[numRows] = {-9.1, -0.7, -2., 0.5, 10};
-	CSMatrixRMultSub<TypeParam>::m.rMultSub(add, mult, add);
-	for (int i = 0; i < numRows; ++i) {
-		EXPECT_NEAR(resRef[i], add[i], 1e-6);
-	}
-}
+			SUBCASE("Result is separate vector") {
+				TypeParam res[numRows] = {};
+				m.rMultSub(sub, mult, res);
+				for (int i = 0; i < numRows; ++i) {
+					CHECK_EQ(resRef[i], res[i]);
+				}
+				// Check that the sub vector was not changed
+				CHECK_EQ(0, sub[0]);
+				CHECK_EQ(0, sub[1]);
+				CHECK_EQ(0, sub[2]);
+				CHECK_EQ(0, sub[3]);
+				CHECK_EQ(0, sub[4]);
+			}
+		}
 
+		SUBCASE("b - A * x, A != 0, x != 0, b == 0") {
+			TypeParam mult[numRows] = {1,2,3,4,5};
+			TypeParam sub[numRows] = {};
+			const TypeParam resRef[numRows] = {-14.1, -12.5, -12.4, -8.3, 0};
+			SUBCASE("Result is inplace") {
+				m.rMultSub(sub, mult, sub);
+				for (int i = 0; i < numRows; ++i) {
+					CHECK_EQ(resRef[i], doctest::Approx(sub[i]).epsilon(1e-6));
+				}
+			}
 
+			SUBCASE("Result is separate vector") {
+				TypeParam res[numRows] = {};
+				m.rMultSub(sub, mult, res);
+				for (int i = 0; i < numRows; ++i) {
+					CHECK_EQ(resRef[i], doctest::Approx(res[i]).epsilon(1e-6));
+				}
+				// Check that the sub vector was not changed
+				CHECK_EQ(0, sub[0]);
+				CHECK_EQ(0, sub[1]);
+				CHECK_EQ(0, sub[2]);
+				CHECK_EQ(0, sub[3]);
+				CHECK_EQ(0, sub[4]);
+			}
+		}
 
-// =========================================================================
-// ======================= Arithmetic operations ===========================
-// =========================================================================
+		SUBCASE("b - A * x, A != 0, x == 0, b != 0") {
+			TypeParam mult[numRows] = {};
+			TypeParam sub[numRows] = {5,6,7,8,9};
+			const TypeParam resRef[numRows] = {5,6,7,8,9};
+			SUBCASE("Result is inplace") {
+				m.rMultSub(sub, mult, sub);
+				for (int i = 0; i < numRows; ++i) {
+					CHECK_EQ(resRef[i], doctest::Approx(sub[i]).epsilon(1e-6));
+				}
+			}
 
-template<typename T>
-class CSRArithmetic : public testing::Test {
-};
-TYPED_TEST_SUITE(CSRArithmetic, MyTypes);
+			SUBCASE("Result is separate vector") {
+				TypeParam res[numRows] = {};
+				m.rMultSub(sub, mult, res);
+				for (int i = 0; i < numRows; ++i) {
+					CHECK_EQ(resRef[i], doctest::Approx(res[i]).epsilon(1e-6));
+				}
+				// Check that the sub vector was not changed
+				CHECK_EQ(5, sub[0]);
+				CHECK_EQ(6, sub[1]);
+				CHECK_EQ(7, sub[2]);
+				CHECK_EQ(8, sub[3]);
+				CHECK_EQ(9, sub[4]);
+			}
+		}
 
-TYPED_TEST(CSRArithmetic, MultiplyByScalar) {
-	const int numRows = 6;
-	const int numCols = 10;
+		SUBCASE("b - A * x, A != 0, x != 0, b != 0") {
+			TypeParam mult[numRows] = {1,0,3,4};
+			TypeParam sub[numRows] = {5,6,7,8,10};
+			const TypeParam resRef[numRows] = {-9.1, -0.7, -2., 0.5, 10};
+			SUBCASE("Result is inplace") {
+				m.rMultSub(sub, mult, sub);
+				for (int i = 0; i < numRows; ++i) {
+					CHECK_EQ(resRef[i], doctest::Approx(sub[i]).epsilon(1e-6));
+				}
+			}
 
-	TypeParam denseRef[numRows][numCols] = {};
-	denseRef[2][8] = 28.41637;
-	denseRef[2][2] = 31.52779;
-	denseRef[1][7] = -237.59453;
-	denseRef[5][3] = 273.3937;
-	denseRef[0][3] = -471.11824;
-
-	SMM::TripletMatrix<TypeParam> triplet(numRows, numCols);
-	for (int i = 0; i < numRows; ++i) {
-		for (int j = 0; j < numCols; ++j) {
-			if (denseRef[i][j] != 0) {
-				triplet.addEntry(i, j, denseRef[i][j]);
+			SUBCASE("Result is separate vector") {
+				TypeParam res[numRows] = {};
+				m.rMultSub(sub, mult, res);
+				for (int i = 0; i < numRows; ++i) {
+					CHECK_EQ(resRef[i], doctest::Approx(res[i]).epsilon(1e-6));
+				}
+				// Check that the sub vector was not changed
+				CHECK_EQ(5, sub[0]);
+				CHECK_EQ(6, sub[1]);
+				CHECK_EQ(7, sub[2]);
+				CHECK_EQ(8, sub[3]);
+				CHECK_EQ(10, sub[4]);
 			}
 		}
 	}
+}
 
-	SMM::CSRMatrix<TypeParam> csr;
-	csr.init(triplet);
+TEST_SUITE("Arithmetic operations") {
+	TEST_CASE_TEMPLATE("Arithmetic operations with CSRMatrix", TypeParam, float, double) {
+		const int numRows = 6;
+		const int numCols = 10;
 
-	TypeParam scalar = -478.53439;
+		TypeParam denseRef[numRows][numCols] = {};
+		SMM::TripletMatrix<TypeParam> triplet(numRows, numCols);
+		triplet.addEntry(0, 3, TypeParam(-471.11824));
+		triplet.addEntry(1, 7, TypeParam(-237.59453));
+		triplet.addEntry(2, 2, TypeParam(31.52779));
+		triplet.addEntry(2, 8, TypeParam(28.41637));
+		triplet.addEntry(5, 3, TypeParam(273.3937));
 
-	csr *= scalar;
+		SMM::CSRMatrix<TypeParam> csr;
+		csr.init(triplet);
 
-	for (const auto& el : csr) {
-		EXPECT_EQ(el.getValue(), scalar * denseRef[el.getRow()][el.getCol()]);
+		SUBCASE("Multiply CSRMatrix with scalar in-place") {
+
+			const TypeParam scalar = -478.53439;
+
+			csr *= scalar;
+
+			CHECK_EQ(csr.getValue(0, 0), 0);
+			CHECK_EQ(csr.getValue(0, 1), 0);
+			CHECK_EQ(csr.getValue(0, 2), 0);
+			CHECK_EQ(csr.getValue(0, 3), scalar * TypeParam(-471.11824));
+			CHECK_EQ(csr.getValue(0, 4), 0);
+			CHECK_EQ(csr.getValue(0, 5), 0);
+			CHECK_EQ(csr.getValue(0, 6), 0);
+			CHECK_EQ(csr.getValue(0, 7), 0);
+			CHECK_EQ(csr.getValue(0, 8), 0);
+			CHECK_EQ(csr.getValue(0, 9), 0);
+
+
+			CHECK_EQ(csr.getValue(1, 0), 0);
+			CHECK_EQ(csr.getValue(1, 1), 0);
+			CHECK_EQ(csr.getValue(1, 2), 0);
+			CHECK_EQ(csr.getValue(1, 3), 0);
+			CHECK_EQ(csr.getValue(1, 4), 0);
+			CHECK_EQ(csr.getValue(1, 5), 0);
+			CHECK_EQ(csr.getValue(1, 6), 0);
+			CHECK_EQ(csr.getValue(1, 7), scalar * TypeParam(-237.59453));
+			CHECK_EQ(csr.getValue(1, 8), 0);
+			CHECK_EQ(csr.getValue(1, 9), 0);
+
+
+			CHECK_EQ(csr.getValue(2, 0), 0);
+			CHECK_EQ(csr.getValue(2, 1), 0);
+			CHECK_EQ(csr.getValue(2, 2), scalar * TypeParam(31.52779));
+			CHECK_EQ(csr.getValue(2, 3), 0);
+			CHECK_EQ(csr.getValue(2, 4), 0);
+			CHECK_EQ(csr.getValue(2, 5), 0);
+			CHECK_EQ(csr.getValue(2, 6), 0);
+			CHECK_EQ(csr.getValue(2, 7), 0);
+			CHECK_EQ(csr.getValue(2, 8), scalar * TypeParam(28.41637));
+			CHECK_EQ(csr.getValue(2, 9), 0);
+
+
+			CHECK_EQ(csr.getValue(3, 0), 0);
+			CHECK_EQ(csr.getValue(3, 1), 0);
+			CHECK_EQ(csr.getValue(3, 2), 0);
+			CHECK_EQ(csr.getValue(3, 3), 0);
+			CHECK_EQ(csr.getValue(3, 4), 0);
+			CHECK_EQ(csr.getValue(3, 5), 0);
+			CHECK_EQ(csr.getValue(3, 6), 0);
+			CHECK_EQ(csr.getValue(3, 7), 0);
+			CHECK_EQ(csr.getValue(3, 8), 0);
+			CHECK_EQ(csr.getValue(3, 9), 0);
+
+
+			CHECK_EQ(csr.getValue(4, 0), 0);
+			CHECK_EQ(csr.getValue(4, 1), 0);
+			CHECK_EQ(csr.getValue(4, 2), 0);
+			CHECK_EQ(csr.getValue(4, 3), 0);
+			CHECK_EQ(csr.getValue(4, 4), 0);
+			CHECK_EQ(csr.getValue(4, 5), 0);
+			CHECK_EQ(csr.getValue(4, 6), 0);
+			CHECK_EQ(csr.getValue(4, 7), 0);
+			CHECK_EQ(csr.getValue(4, 8), 0);
+			CHECK_EQ(csr.getValue(4, 9), 0);
+
+
+			CHECK_EQ(csr.getValue(5, 0), 0);
+			CHECK_EQ(csr.getValue(5, 1), 0);
+			CHECK_EQ(csr.getValue(5, 2), 0);
+			CHECK_EQ(csr.getValue(5, 3), scalar * TypeParam(273.3937));
+			CHECK_EQ(csr.getValue(5, 4), 0);
+			CHECK_EQ(csr.getValue(5, 5), 0);
+			CHECK_EQ(csr.getValue(5, 6), 0);
+			CHECK_EQ(csr.getValue(5, 7), 0);
+			CHECK_EQ(csr.getValue(5, 8), 0);
+			CHECK_EQ(csr.getValue(5, 9), 0);
+		}
+
+		SUBCASE("Add two CSRMatrices in-place") {
+			SMM::TripletMatrix<TypeParam> triplet2(numRows, numCols);
+			triplet2.addEntry(0, 3, -449.43152);
+			triplet2.addEntry(1, 7, 621.94377);
+			triplet2.addEntry(2, 2, 53.47841);
+			triplet2.addEntry(2, 8, 558.57004);
+			triplet2.addEntry(5, 3, 237.2853);
+
+			SMM::CSRMatrix csr2(triplet2);
+			csr.inplaceAdd(csr2);
+
+			CHECK_EQ(csr.getValue(0, 0), 0);
+			CHECK_EQ(csr.getValue(0, 1), 0);
+			CHECK_EQ(csr.getValue(0, 2), 0);
+			CHECK_EQ(csr.getValue(0, 3), TypeParam(-471.11824) + TypeParam(-449.43152));
+			CHECK_EQ(csr.getValue(0, 4), 0);
+			CHECK_EQ(csr.getValue(0, 5), 0);
+			CHECK_EQ(csr.getValue(0, 6), 0);
+			CHECK_EQ(csr.getValue(0, 7), 0);
+			CHECK_EQ(csr.getValue(0, 8), 0);
+			CHECK_EQ(csr.getValue(0, 9), 0);
+
+
+			CHECK_EQ(csr.getValue(1, 0), 0);
+			CHECK_EQ(csr.getValue(1, 1), 0);
+			CHECK_EQ(csr.getValue(1, 2), 0);
+			CHECK_EQ(csr.getValue(1, 3), 0);
+			CHECK_EQ(csr.getValue(1, 4), 0);
+			CHECK_EQ(csr.getValue(1, 5), 0);
+			CHECK_EQ(csr.getValue(1, 6), 0);
+			CHECK_EQ(csr.getValue(1, 7), TypeParam(-237.59453) + TypeParam(621.94377));
+			CHECK_EQ(csr.getValue(1, 8), 0);
+			CHECK_EQ(csr.getValue(1, 9), 0);
+
+
+			CHECK_EQ(csr.getValue(2, 0), 0);
+			CHECK_EQ(csr.getValue(2, 1), 0);
+			CHECK_EQ(csr.getValue(2, 2), TypeParam(31.52779) + TypeParam(53.47841));
+			CHECK_EQ(csr.getValue(2, 3), 0);
+			CHECK_EQ(csr.getValue(2, 4), 0);
+			CHECK_EQ(csr.getValue(2, 5), 0);
+			CHECK_EQ(csr.getValue(2, 6), 0);
+			CHECK_EQ(csr.getValue(2, 7), 0);
+			CHECK_EQ(csr.getValue(2, 8), TypeParam(28.41637) + TypeParam(558.57004));
+			CHECK_EQ(csr.getValue(2, 9), 0);
+
+
+			CHECK_EQ(csr.getValue(3, 0), 0);
+			CHECK_EQ(csr.getValue(3, 1), 0);
+			CHECK_EQ(csr.getValue(3, 2), 0);
+			CHECK_EQ(csr.getValue(3, 3), 0);
+			CHECK_EQ(csr.getValue(3, 4), 0);
+			CHECK_EQ(csr.getValue(3, 5), 0);
+			CHECK_EQ(csr.getValue(3, 6), 0);
+			CHECK_EQ(csr.getValue(3, 7), 0);
+			CHECK_EQ(csr.getValue(3, 8), 0);
+			CHECK_EQ(csr.getValue(3, 9), 0);
+
+
+			CHECK_EQ(csr.getValue(4, 0), 0);
+			CHECK_EQ(csr.getValue(4, 1), 0);
+			CHECK_EQ(csr.getValue(4, 2), 0);
+			CHECK_EQ(csr.getValue(4, 3), 0);
+			CHECK_EQ(csr.getValue(4, 4), 0);
+			CHECK_EQ(csr.getValue(4, 5), 0);
+			CHECK_EQ(csr.getValue(4, 6), 0);
+			CHECK_EQ(csr.getValue(4, 7), 0);
+			CHECK_EQ(csr.getValue(4, 8), 0);
+			CHECK_EQ(csr.getValue(4, 9), 0);
+
+
+			CHECK_EQ(csr.getValue(5, 0), 0);
+			CHECK_EQ(csr.getValue(5, 1), 0);
+			CHECK_EQ(csr.getValue(5, 2), 0);
+			CHECK_EQ(csr.getValue(5, 3), TypeParam(273.3937) + TypeParam(237.2853));
+			CHECK_EQ(csr.getValue(5, 4), 0);
+			CHECK_EQ(csr.getValue(5, 5), 0);
+			CHECK_EQ(csr.getValue(5, 6), 0);
+			CHECK_EQ(csr.getValue(5, 7), 0);
+			CHECK_EQ(csr.getValue(5, 8), 0);
+			CHECK_EQ(csr.getValue(5, 9), 0);
+		}
+
+		SUBCASE("Subtract CSRMatrices inplace") {
+			SMM::TripletMatrix<TypeParam> triplet2(numRows, numCols);
+			triplet2.addEntry(0, 3, -449.43152);
+			triplet2.addEntry(1, 7, 621.94377);
+			triplet2.addEntry(2, 2, 53.47841);
+			triplet2.addEntry(2, 8, 558.57004);
+			triplet2.addEntry(5, 3, 237.2853);
+
+			SMM::CSRMatrix csr2(triplet2);
+			csr.inplaceSubtract(csr2);
+
+			CHECK_EQ(csr.getValue(0, 0), 0);
+			CHECK_EQ(csr.getValue(0, 1), 0);
+			CHECK_EQ(csr.getValue(0, 2), 0);
+			CHECK_EQ(csr.getValue(0, 3), TypeParam(-471.11824) - TypeParam(-449.43152));
+			CHECK_EQ(csr.getValue(0, 4), 0);
+			CHECK_EQ(csr.getValue(0, 5), 0);
+			CHECK_EQ(csr.getValue(0, 6), 0);
+			CHECK_EQ(csr.getValue(0, 7), 0);
+			CHECK_EQ(csr.getValue(0, 8), 0);
+			CHECK_EQ(csr.getValue(0, 9), 0);
+
+
+			CHECK_EQ(csr.getValue(1, 0), 0);
+			CHECK_EQ(csr.getValue(1, 1), 0);
+			CHECK_EQ(csr.getValue(1, 2), 0);
+			CHECK_EQ(csr.getValue(1, 3), 0);
+			CHECK_EQ(csr.getValue(1, 4), 0);
+			CHECK_EQ(csr.getValue(1, 5), 0);
+			CHECK_EQ(csr.getValue(1, 6), 0);
+			CHECK_EQ(csr.getValue(1, 7), TypeParam(-237.59453) - TypeParam(621.94377));
+			CHECK_EQ(csr.getValue(1, 8), 0);
+			CHECK_EQ(csr.getValue(1, 9), 0);
+
+
+			CHECK_EQ(csr.getValue(2, 0), 0);
+			CHECK_EQ(csr.getValue(2, 1), 0);
+			CHECK_EQ(csr.getValue(2, 2), TypeParam(31.52779) - TypeParam(53.47841));
+			CHECK_EQ(csr.getValue(2, 3), 0);
+			CHECK_EQ(csr.getValue(2, 4), 0);
+			CHECK_EQ(csr.getValue(2, 5), 0);
+			CHECK_EQ(csr.getValue(2, 6), 0);
+			CHECK_EQ(csr.getValue(2, 7), 0);
+			CHECK_EQ(csr.getValue(2, 8), TypeParam(28.41637) - TypeParam(558.57004));
+			CHECK_EQ(csr.getValue(2, 9), 0);
+
+
+			CHECK_EQ(csr.getValue(3, 0), 0);
+			CHECK_EQ(csr.getValue(3, 1), 0);
+			CHECK_EQ(csr.getValue(3, 2), 0);
+			CHECK_EQ(csr.getValue(3, 3), 0);
+			CHECK_EQ(csr.getValue(3, 4), 0);
+			CHECK_EQ(csr.getValue(3, 5), 0);
+			CHECK_EQ(csr.getValue(3, 6), 0);
+			CHECK_EQ(csr.getValue(3, 7), 0);
+			CHECK_EQ(csr.getValue(3, 8), 0);
+			CHECK_EQ(csr.getValue(3, 9), 0);
+
+
+			CHECK_EQ(csr.getValue(4, 0), 0);
+			CHECK_EQ(csr.getValue(4, 1), 0);
+			CHECK_EQ(csr.getValue(4, 2), 0);
+			CHECK_EQ(csr.getValue(4, 3), 0);
+			CHECK_EQ(csr.getValue(4, 4), 0);
+			CHECK_EQ(csr.getValue(4, 5), 0);
+			CHECK_EQ(csr.getValue(4, 6), 0);
+			CHECK_EQ(csr.getValue(4, 7), 0);
+			CHECK_EQ(csr.getValue(4, 8), 0);
+			CHECK_EQ(csr.getValue(4, 9), 0);
+
+
+			CHECK_EQ(csr.getValue(5, 0), 0);
+			CHECK_EQ(csr.getValue(5, 1), 0);
+			CHECK_EQ(csr.getValue(5, 2), 0);
+			CHECK_EQ(csr.getValue(5, 3), TypeParam(273.3937) - TypeParam(237.2853));
+			CHECK_EQ(csr.getValue(5, 4), 0);
+			CHECK_EQ(csr.getValue(5, 5), 0);
+			CHECK_EQ(csr.getValue(5, 6), 0);
+			CHECK_EQ(csr.getValue(5, 7), 0);
+			CHECK_EQ(csr.getValue(5, 8), 0);
+			CHECK_EQ(csr.getValue(5, 9), 0);
+		}
 	}
 }
 
+TEST_SUITE("File operations") {
+	TEST_CASE_TEMPLATE("Load symmetric matrix market", TypeParam, float, double) {
+		const std::string path = ASSET_PATH + std::string("load_symmetric_test.mtx");
+		SMM::CSRMatrix<TypeParam> csr;
+		const SMM::MatrixLoadStatus status = SMM::loadMatrix(path.c_str(), csr);
+		REQUIRE_EQ(status, SMM::MatrixLoadStatus::SUCCESS);
+		REQUIRE_EQ(csr.getDenseRowCount(), 5);
+		REQUIRE_EQ(csr.getDenseColCount(), 5);
+		REQUIRE_EQ(csr.getNonZeroCount(), 8);
 
-TYPED_TEST(CSRArithmetic, InplaceAdd) {
-	const int numRows = 6;
-	const int numCols = 10;
+		CHECK_EQ(csr.getValue(0, 0), doctest::Approx(3).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(0, 1), doctest::Approx(0).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(0, 2), doctest::Approx(0).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(0, 3), doctest::Approx(0).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(0, 4), doctest::Approx(0).epsilon(1e-12));
 
-	TypeParam denseRef1[numRows][numCols] = {};
-	denseRef1[2][8] = 28.41637;
-	denseRef1[2][2] = 31.52779;
-	denseRef1[1][7] = -237.59453;
-	denseRef1[5][3] = 273.3937;
-	denseRef1[0][3] = -471.11824;
+		CHECK_EQ(csr.getValue(1, 0), doctest::Approx(0).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(1, 1), doctest::Approx(12).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(1, 2), doctest::Approx(0).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(1, 3), doctest::Approx(0).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(1, 4), doctest::Approx(TypeParam(34)).epsilon(1e-12));
 
-	TypeParam denseRef2[numRows][numCols] = {};
-	denseRef1[2][8] = 558.57004;
-	denseRef1[2][2] = 53.47841;
-	denseRef1[1][7] = 621.94377;
-	denseRef1[5][3] = 237.2853;
-	denseRef1[0][3] = -449.43152;
+		CHECK_EQ(csr.getValue(2, 0), doctest::Approx(0).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(2, 1), doctest::Approx(0).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(2, 2), doctest::Approx(TypeParam(-0.3)).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(2, 3), doctest::Approx(0).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(2, 4), doctest::Approx(0).epsilon(1e-12));
 
-	SMM::TripletMatrix<TypeParam> triplet1(numRows, numCols);
-	SMM::TripletMatrix<TypeParam> triplet2(numRows, numCols);
-	for (int i = 0; i < numRows; ++i) {
-		for (int j = 0; j < numCols; ++j) {
-			if (denseRef1[i][j] != 0) {
-				triplet1.addEntry(i, j, denseRef1[i][j]);
-				triplet2.addEntry(i, j, denseRef2[i][j]);
+		CHECK_EQ(csr.getValue(3, 0), doctest::Approx(0).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(3, 1), doctest::Approx(0).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(3, 2), doctest::Approx(0).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(3, 3), doctest::Approx(0).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(3, 4), doctest::Approx(0).epsilon(1e-12));
+
+		CHECK_EQ(csr.getValue(4, 0), doctest::Approx(0).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(4, 1), doctest::Approx(TypeParam(34)).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(4, 2), doctest::Approx(0).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(4, 3), doctest::Approx(0).epsilon(1e-12));
+		CHECK_EQ(csr.getValue(4, 4), doctest::Approx(TypeParam(-4)).epsilon(1e-12));
+	}
+
+	TEST_CASE_TEMPLATE("Save as dense matrix", TypeParam, float, double) {
+		struct FileRemoveRAII {
+			FileRemoveRAII(const std::string& name) :
+				name(name) {
+			}
+			~FileRemoveRAII() {
+				std::remove(name.c_str());
+			}
+			const char* getName() {
+				return name.c_str();
+			}
+		private:
+			std::string name;
+		};
+		const int numRows = 10;
+		const int numCols = 10;
+		SMM::TripletMatrix<TypeParam> triplet(numRows, numCols);
+		triplet.addEntry(0, 0, 234.5324);
+		triplet.addEntry(3, 2, 2.4);
+		triplet.addEntry(5, 2, 1);
+		triplet.addEntry(5, 3, 2);
+		triplet.addEntry(5, 4, 3);
+		triplet.addEntry(5, 6, 4);
+		triplet.addEntry(6, 1, 3.4);
+		for (int i = 0; i < 10; ++i) triplet.addEntry(9, i, 1);
+		SMM::CSRMatrix<TypeParam> csr(triplet);
+		FileRemoveRAII file(ASSET_PATH + std::string("__test.smmdt"));
+		SMM::saveDenseText(file.getName(), csr);
+
+		SMM::TripletMatrix<TypeParam> tripletRead;
+		const SMM::MatrixLoadStatus status = SMM::loadMatrix(file.getName(), tripletRead);
+		REQUIRE_EQ(status, SMM::MatrixLoadStatus::SUCCESS);
+		for (int i = 0; i < numRows; ++i) {
+			for (int j = 0; j < numCols; ++j) {
+				CHECK_EQ(doctest::Approx(tripletRead.getValue(i, j)).epsilon(1e-12), triplet.getValue(i, j));
 			}
 		}
 	}
-
-	SMM::CSRMatrix<TypeParam> csr1;
-	csr1.init(triplet1);
-
-	SMM::CSRMatrix<TypeParam> csr2;
-	csr2.init(triplet2);
-
-	csr1.inplaceAdd(csr2);
-
-	for (const auto& el : csr1) {
-		EXPECT_EQ(el.getValue(), denseRef1[el.getRow()][el.getCol()] + denseRef2[el.getRow()][el.getCol()]);
-	}
 }
-
-TYPED_TEST(CSRArithmetic, InplaceSubtract) {
-	const int numRows = 6;
-	const int numCols = 10;
-
-	TypeParam denseRef1[numRows][numCols] = {};
-	denseRef1[2][8] = 28.41637;
-	denseRef1[2][2] = 31.52779;
-	denseRef1[1][7] = -237.59453;
-	denseRef1[5][3] = 273.3937;
-	denseRef1[0][3] = -471.11824;
-
-	TypeParam denseRef2[numRows][numCols] = {};
-	denseRef1[2][8] = 558.57004;
-	denseRef1[2][2] = 53.47841;
-	denseRef1[1][7] = 621.94377;
-	denseRef1[5][3] = 237.2853;
-	denseRef1[0][3] = -449.43152;
-
-	SMM::TripletMatrix<TypeParam> triplet1(numRows, numCols);
-	SMM::TripletMatrix<TypeParam> triplet2(numRows, numCols);
-	for (int i = 0; i < numRows; ++i) {
-		for (int j = 0; j < numCols; ++j) {
-			if (denseRef1[i][j] != 0) {
-				triplet1.addEntry(i, j, denseRef1[i][j]);
-				triplet2.addEntry(i, j, denseRef2[i][j]);
-			}
-		}
-	}
-
-	SMM::CSRMatrix<TypeParam> csr1;
-	csr1.init(triplet1);
-
-	SMM::CSRMatrix<TypeParam> csr2;
-	csr2.init(triplet2);
-
-	csr1.inplaceSubtract(csr2);
-
-	for (const auto& el : csr1) {
-		EXPECT_EQ(el.getValue(), denseRef1[el.getRow()][el.getCol()] - denseRef2[el.getRow()][el.getCol()]);
-	}
-}
-
-// =========================================================================
-// ============================== FILE LOAD ================================
-// =========================================================================
-
-template<typename T>
-class LoadFile : public testing::Test {
-};
-TYPED_TEST_SUITE(LoadFile, MyTypes);
-
-TYPED_TEST(LoadFile, LoadMatrixMarket) {
-	const std::string path = ASSET_PATH + std::string("mesh1e1_structural_48_48_177.mtx");
-	SMM::TripletMatrix<TypeParam> triplet;
-	const SMM::MatrixLoadStatus status = SMM::loadMatrix(path.c_str(), triplet);
-	ASSERT_EQ(status, SMM::MatrixLoadStatus::SUCCESS);
-	EXPECT_EQ(triplet.getDenseRowCount(), 48);
-	EXPECT_EQ(triplet.getDenseColCount(), 48);
-	EXPECT_EQ(triplet.getNonZeroCount(), 306);
-}
-
-// =========================================================================
-// ============================== FILE SAVE ================================
-// =========================================================================
-
-template<typename T>
-class SaveDense : public testing::Test {
-};
-TYPED_TEST_SUITE(SaveDense, MyTypes);
-
-TYPED_TEST(SaveDense, CSRSMMDT) {
-	struct FileRemoveRAII {
-		FileRemoveRAII(const std::string& name) :
-			name(name) {
-		}
-		~FileRemoveRAII() {
-			std::remove(name.c_str());
-		}
-		const char* getName() {
-			return name.c_str();
-		}
-	private:
-		std::string name;
-	};
-	SMM::TripletMatrix<TypeParam> triplet(10, 10);
-	triplet.addEntry(0, 0, 234.5324);
-	triplet.addEntry(3, 2, 2.4);
-	triplet.addEntry(5, 2, 1);
-	triplet.addEntry(5, 3, 2);
-	triplet.addEntry(5, 4, 3);
-	triplet.addEntry(5, 6, 4);
-	triplet.addEntry(6, 1, 3.4);
-	for (int i = 0; i < 10; ++i) triplet.addEntry(9, i, 1);
-	SMM::CSRMatrix<TypeParam> csr(triplet);
-	FileRemoveRAII file(ASSET_PATH + std::string("__test.smmdt"));
-	SMM::saveDenseText(file.getName(), csr);
-
-	SMM::TripletMatrix<TypeParam> tripletRead;
-	const SMM::MatrixLoadStatus status = SMM::loadMatrix(file.getName(), tripletRead);
-	ASSERT_EQ(status, SMM::MatrixLoadStatus::SUCCESS);
-	EXPECT_TRUE(NearMatrix(tripletRead, csr, TypeParam(1e-6)));
-}
-
-int main(int argc, char** argv) {
-	testing::InitGoogleTest(&argc, argv);
-	return RUN_ALL_TESTS();
-}
-#endif

@@ -2639,4 +2639,15 @@ namespace SMM {
 			return MatrixLoadStatus::FAILED_TO_OPEN_FILE_UNKNOWN_FORMAT;
 		}
 	}
+
+	template<typename T>
+	inline MatrixLoadStatus loadMatrix(const char* filepath, CSRMatrix<T>& out) {
+		SMM::TripletMatrix<T> triplet;
+		const MatrixLoadStatus status = loadMatrix(filepath, triplet);
+		if (status != MatrixLoadStatus::SUCCESS) {
+			return status;
+		}
+		out.init(triplet);
+		return MatrixLoadStatus::SUCCESS;
+	}
 }
