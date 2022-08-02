@@ -21,7 +21,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE include)
 doctest_discover_tests(${PROJECT_NAME})
 
 add_custom_command(TARGET 
-    ${PROJECT_NAME} POST_BUILD
+    ${PROJECT_NAME} PRE_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:${PROJECT_NAME}> $<TARGET_FILE_DIR:${PROJECT_NAME}>
     COMMAND_EXPAND_LISTS
 )
