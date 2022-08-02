@@ -2106,7 +2106,7 @@ namespace SMM {
 	/// @param[in,out] x Initial condition, the result will be written here too 
 	/// @return SolverStatus the status the solved system
 	template<typename T>
-	inline SolverStatus BiCGSquared(const CSRMatrix<T>& a, T* b, T* x, int maxIterations, T eps) {
+	inline SolverStatus ConjugateGradientSquared(const CSRMatrix<T>& a, T* b, T* x, int maxIterations, T eps) {
 		maxIterations = std::min(maxIterations, a.getDenseRowCount());
 		if (maxIterations == -1) {
 			maxIterations = a.getDenseRowCount();

@@ -28,6 +28,7 @@ set(SRC
 	./cpp/triplet.cpp
 	./cpp/csr.cpp
     ./cpp/cg.cpp
+    ./cpp/cgsquared.cpp
 )
 
 SET(HEADERS
