@@ -200,9 +200,9 @@ namespace SMM {
 
 	template<typename T>
 	inline Vector<T>::Vector(Vector<T>&& other) noexcept :
-		size(other.size) {
-		free(data);
-		data = other.data;
+		size(other.size),
+		data(other.data)
+	{
 		other.data = nullptr;
 		other.size = 0;
 	}
@@ -2106,7 +2106,7 @@ namespace SMM {
 	/// @param[in,out] x Initial condition, the result will be written here too 
 	/// @return SolverStatus the status the solved system
 	template<typename T>
-	inline SolverStatus BiCGSquared(const CSRMatrix<T>& a, T* b, T* x, int maxIterations, T eps) {
+	inline SolverStatus ConjugateGradientSquared(const CSRMatrix<T>& a, T* b, T* x, int maxIterations, T eps) {
 		maxIterations = std::min(maxIterations, a.getDenseRowCount());
 		if (maxIterations == -1) {
 			maxIterations = a.getDenseRowCount();
@@ -2638,5 +2638,16 @@ namespace SMM {
 		} else {
 			return MatrixLoadStatus::FAILED_TO_OPEN_FILE_UNKNOWN_FORMAT;
 		}
+	}
+
+	template<typename T>
+	inline MatrixLoadStatus loadMatrix(const char* filepath, CSRMatrix<T>& out) {
+		SMM::TripletMatrix<T> triplet;
+		const MatrixLoadStatus status = loadMatrix(filepath, triplet);
+		if (status != MatrixLoadStatus::SUCCESS) {
+			return status;
+		}
+		out.init(triplet);
+		return MatrixLoadStatus::SUCCESS;
 	}
 }
