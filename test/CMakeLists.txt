@@ -27,6 +27,7 @@ enable_testing()
 set(SRC
 	./cpp/triplet.cpp
 	./cpp/csr.cpp
+    ./cpp/cg.cpp
 )
 add_executable(${PROJECT_NAME} ${SRC})
 target_link_libraries(${PROJECT_NAME} doctest::doctest sparse_matrix_math)

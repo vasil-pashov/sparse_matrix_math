@@ -200,9 +200,9 @@ namespace SMM {
 
 	template<typename T>
 	inline Vector<T>::Vector(Vector<T>&& other) noexcept :
-		size(other.size) {
-		free(data);
-		data = other.data;
+		size(other.size),
+		data(other.data)
+	{
 		other.data = nullptr;
 		other.size = 0;
 	}
