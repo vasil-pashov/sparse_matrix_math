@@ -29,6 +29,7 @@ set(SRC
 	./cpp/csr.cpp
     ./cpp/cg.cpp
     ./cpp/cgsquared.cpp
+    ./cpp/bicgstab.cpp
 )
 
 SET(HEADERS

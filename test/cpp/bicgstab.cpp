@@ -1,3 +1,5 @@
+#if 0
+
 #include "gtest/gtest.h"
 #include "test_common.h"
 #include "solver_common.h"
@@ -109,4 +111,57 @@ TYPED_TEST(BiCGStabSGS_PositiveDefinite, mesh1em6_structural_48_48_177) {
 TYPED_TEST(BiCGStabSGS_Indefinite, sherman1_1000_1000_2375) {
 	const std::string path = ASSET_PATH + std::string("sherman1_1000_1000_2375.mtx");
 	this->SumRowTest(path.c_str());
+}
+
+#endif
+
+#include "doctest/doctest.h"
+#include "sparse_matrix_math.h"
+#include "test_common.h"
+#include <string>
+#include <vector>
+
+TEST_CASE_TEMPLATE("BiConjugate Gradient Stabilized method", T, float, double) {
+	std::string matrixName;
+	const std::vector<std::string> matrixNames = {
+		"mesh1e1_structural_48_48_177.mtx",
+		"mesh1em1_structural_48_48_177.mtx",
+		"mesh1em6_structural_48_48_177.mtx"
+	};
+	DOCTEST_VALUE_PARAMETERIZED_DATA(matrixName, matrixNames);
+
+	const std::string matrixPath = getMatrixPath(matrixName);
+	SMM::CSRMatrix<T> m;
+	REQUIRE_EQ(SMM::loadMatrix(matrixPath.c_str(), m), SMM::MatrixLoadStatus::SUCCESS);
+	SMM::Vector<T> rhs = sumColumsPerRow(m);
+	SMM::Vector<T> x(m.getDenseRowCount(), 0);
+	REQUIRE_EQ(SMM::BiCGStab<T>(m, rhs, x, -1, l2Eps<T>()), SMM::SolverStatus::SUCCESS);
+
+	for (const T ri : x) {
+		CHECK_EQ(T(1), doctest::Approx(ri).epsilon(infEps<T>()));
+	}
+}
+
+TEST_CASE_TEMPLATE("Preconditioned BiConjugate Gradient Stabilized method. Symmetric Gauss Seidel Preconditioner", T, float, double) {
+	std::string matrixName;
+	const std::vector<std::string> matrixNames = {
+		"mesh1e1_structural_48_48_177.mtx",
+		"mesh1em1_structural_48_48_177.mtx",
+		"mesh1em6_structural_48_48_177.mtx"
+	};
+	DOCTEST_VALUE_PARAMETERIZED_DATA(matrixName, matrixNames);
+
+	const std::string matrixPath = getMatrixPath(matrixName);
+	SMM::CSRMatrix<T> m;
+	REQUIRE_EQ(SMM::loadMatrix(matrixPath.c_str(), m), SMM::MatrixLoadStatus::SUCCESS);
+	SMM::Vector<T> rhs = sumColumsPerRow(m);
+	SMM::Vector<T> x(m.getDenseRowCount(), 0);
+
+	using SGSPreconditioner = SMM::CSRMatrix<T>::SGSPreconditioner;
+	const SGSPreconditioner& M = m.template getPreconditioner<SMM::SolverPreconditioner::SYMMETRIC_GAUS_SEIDEL>();
+	REQUIRE_EQ(SMM::BiCGStab<SGSPreconditioner, T>(m, rhs, x, -1, l2Eps<T>(), M), SMM::SolverStatus::SUCCESS);
+
+	for (const T ri : x) {
+		CHECK_EQ(T(1), doctest::Approx(ri).epsilon(infEps<T>()));
+	}
 }
