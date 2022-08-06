@@ -2036,23 +2036,17 @@ namespace SMM {
 		a.rMultSub(b, x, r);
 
 		Vector<T> p(a.getDenseRowCount());
-		for (int i = 0; i < p.getSize(); ++i) {
-			p[i] = r[i];
-		}
+		std::copy_n(r.begin(), a.getDenseRowCount(), p.begin());
 
 		Vector<T> ap(a.getDenseRowCount());
 
 		T rSquare = r * r;
 		int iterations = 0;
-		T infNorm = T(0);
+		const T epsSquared = eps * eps;
+		const int rows = a.getDenseRowCount();
 		do {
 			a.rMult(p, ap);
 			const T denom = ap* p;
-#ifdef SMM_DEBUG_PRINT
-			std::cout << "i: " << iterations << std::endl;
-			std::cout << "r^2: " << rSquare << std::endl;
-			std::cout << "Ap.p: " << denom << std::endl;
-#endif
 			// Numerical instability will cause devision by zero (or something close to). The method must be restarted
 			// For positive definite matrices if denom becomes 0 this is a lucky breakdown so we should not exit with error
 			// but continue iterating. However we cannot know in advance if the matrix is positive definite, thus a heuristic is used.
@@ -2063,19 +2057,22 @@ namespace SMM {
 				return SolverStatus::DIVERGED;
 			}
 			const T alpha = rSquare / denom;
-			infNorm = T(0);
-			for(int i = 0; i < a.getDenseRowCount(); ++i) {
+#ifdef SMM_MULTITHREADING
+			tbb::parallel_for(tbb::blocked_range<int>(0, rows), [&](const tbb::blocked_range<int>& range) {
+				for (int j = range.begin(); j < range.end(); ++j) {
+					x[j] += alpha * p[j];
+					r[j] -= alpha * ap[j];
+				}
+			});
+#else
+			for(int i = 0; i < rows; ++i) {
 				x[i] += alpha * p[i];
 				r[i] -= alpha * ap[i];
-				infNorm = std::max(std::abs(r[i]), infNorm);
 			}
+#endif
 			// Dot product r * r can be zero (or close to zero) only if r has length close to zero.
 			// But if the residual is close to zero, this means that we have found a solution
 			const T newRSquare = r * r;
-#ifdef SMM_DEBUG_PRINT
-			std::cout << "alpha: " << alpha << std::endl;
-			std::cout << "new r^2: " << newRSquare << std::endl;
-#endif
 			// If rSquare is small it's expected next iteration residual to be small too
 			// Thus deleting large number by a small is highly unlikely here
 			// If rSquare is small and newRSquare is large, we have critical brakedown, which might happen with BiCG method
@@ -2083,16 +2080,20 @@ namespace SMM {
 				return SolverStatus::DIVERGED;
 			}
 			const T beta = newRSquare / rSquare;
-#ifdef SMM_DEBUG_PRINT
-			std::cout << "beta: " << beta << std::endl;
-			std::cout << "==================================================" << std::endl;
-#endif
-			for(int i = 0; i < a.getDenseRowCount(); ++i) {
+#ifdef SMM_MULTITHREADING
+			tbb::parallel_for(tbb::blocked_range<int>(0, rows), [&](const tbb::blocked_range<int>& range) {
+				for (int j = range.begin(); j < range.end(); ++j) {
+					p[j] = r[j] + beta * p[j];
+				}
+			});
+#else
+			for(int i = 0; i < rows; ++i) {
 				p[i] = r[i] + beta * p[i];
 			}
+#endif
 			rSquare = newRSquare;
 			iterations++;
-		} while ((infNorm > eps || rSquare > eps * eps) && iterations < maxIterations);
+		} while (rSquare > epsSquared && iterations < maxIterations);
 
 		if (iterations > maxIterations) {
 			return SolverStatus::MAX_ITERATIONS_REACHED;
