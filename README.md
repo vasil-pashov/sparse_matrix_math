@@ -133,6 +133,7 @@ sudo cmake --install ./
 
 To change the install directories use `CMAKE_INSTALL_PREFIX` and `CONFIG_INSTALL_DIR` variables (if some nonstandard structure is needed). Where `CONFIG_INSTALL_DIR` gets appended to `CMAKE_INSTALL_PREFIX`.
 
-# Options
+# CMake Options
 * SMM_WITH_MULTITHREADING - Enables multithreading for the library. This will create dependency on the TBB library. Default `ON`.
-* SMM_WITH_TESTS - If set this will build the tests project. Default `OFF`
+* SMM_WITH_TESTS - If set this will build the tests project. Default `OFF`.
+* SMM_WITH_INSTALL - If this is set to true an install target will be generated. Default `OFF`.
