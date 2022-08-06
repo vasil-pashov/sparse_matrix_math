@@ -2121,39 +2121,55 @@ namespace SMM {
 		// They can be expressed only in terms of themselves, the other vectors do same some computation
 		// of the use a lot of memory they can be removed.
 		Vector<T> p(rows), u(rows), q(rows), alphaUQ(rows), ap(rows);
-		for(int i = 0; i < rows; ++i) {
-			p[i] = r[i];
-			u[i] = r[i];
-			r0[i] = r[i];
-		}
+		std::copy_n(r.begin(), rows, p.begin());
+		std::copy_n(r.begin(), rows, u.begin());
+		std::copy_n(r.begin(), rows, r0.begin());
 
 		T rr0 = r * r0;
-		T infNorm = T(0);
 		int iterations = 0;
+		const T epsSquared = eps * eps;
 		do {
 			a.rMult(p, ap);
 			const T denom = ap * r0;
 			// Must investigate if denom < eps is critical breakdown
 			const T alpha = rr0 / denom;
+#ifdef SMM_MULTITHREADING
+			tbb::parallel_for(tbb::blocked_range<int>(0, rows), [&](const tbb::blocked_range<int>& range) {
+				for (int j = range.begin(); j < range.end(); ++j) {
+					q[j] = _smm_fma(-alpha, ap[j], u[j]);
+					alphaUQ[j] = alpha * (u[j] + q[j]);
+					x[j] = x[j] + alphaUQ[j];
+				}
+			});
+#else
 			for(int i = 0; i < rows; ++i) {
 				q[i] = _smm_fma(-alpha, ap[i], u[i]);
 				alphaUQ[i] = alpha * (u[i] + q[i]);
 				x[i] = x[i] + alphaUQ[i];
 			}
+#endif
 			a.rMultSub(r, alphaUQ, r);
 			const T newRR0 = r * r0;
 			// Must investigate if rr0 < eps is critical breakdown
 			const T beta = newRR0 / rr0;
 			
-			infNorm = T(0);
+#if SMM_MULTITHREADING
+			tbb::parallel_for(tbb::blocked_range<int>(0, rows), [&](const tbb::blocked_range<int>& range) {
+				for (int j = range.begin(); j < range.end(); ++j) {
+					u[j] = _smm_fma(beta, q[j], r[j]);
+					p[j] = _smm_fma(beta, _smm_fma(beta, p[j], q[j]), u[j]);
+				}
+			});
+#else
 			for(int i = 0; i < rows; ++i) {
 				u[i] = _smm_fma(beta, q[i], r[i]);
 				p[i] = _smm_fma(beta, _smm_fma(beta, p[i], q[i]), u[i]);
-				infNorm = std::max(std::abs(r[i]), infNorm);
 			}
+#endif
 			rr0 = newRR0;
 			iterations++;
-		} while (infNorm > eps && iterations < maxIterations);
+			const T residualSquared = r * r;
+		} while (residualSquared > epsSquared && iterations < maxIterations);
 
 		if (iterations > maxIterations) {
 			return SolverStatus::MAX_ITERATIONS_REACHED;
