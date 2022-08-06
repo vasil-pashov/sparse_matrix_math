@@ -3,6 +3,27 @@ Header only, C++17 library for solving systems of equations with sparse matrices
 
 # Iterative Methods
 Currently available methods are Krylov iterative methods derivatives of the BiConjugate Gradient Method. These methods can work with positive definite, negative definite and indefinite matrices. In case of symmetric positive definite and symmetric negative definite matrix the methods will converge to the exact answer. Theoretically speaking given SPD or SND matrices the methods will find the exact answer after no more that `m` steps where `m` is the size of the matrix. In the case of indefinite matrix the methods can occasionally diverge. In that case the method must be restarted with different initial guess. Keep in mind that there is no Krylov method which is proven to converge for general indefinite matrix.
+
+## Conjugate Gradient Method
+This method is proven to converge for every SPD matrix. Keep in mind that the proof is with exact math (floating point arithmetics could lead to divergence).
+```cpp
+SMM::CSRMatrix m;
+// Fill m
+...
+// Init the right hand side somehow
+float* rhs = initRhs()
+// Initial guess.
+float* x0 = initialGuess();
+// The result will be stored here. The vector must be preallocated by the caller.
+float* res = new float[m.getDenseRowCount()];
+// The method will do no more than maxIterations iterations. If maxIterations is -1 the method will use the number of rows of the matrix as stopping condition.
+const int maxIterations = 100;
+// This will be used by the method as a condition for convergence. If the second norm of the residual becomes smaller, the method will end.
+// Note it is allowed for x0 and res to be the same vector. If this happens x0 will be overriten.
+const float L2NormCondition = 1e-6;
+SMM::SolverStatus status = SMM::ConjugateGradient(m, rhs, x0, res, maxIterations, L2NormCondition);
+```
+
 ## BiConjugate Gradient Symmetric Method
 This is a variant of the BiConjugate Gradient, where the input matrix is known to be symmetric. For SPD matrix would yeald the exactly the same result as the Conjugate Gradient method. Example call:
 ```cpp
